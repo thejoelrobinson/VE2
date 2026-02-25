@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Editor</title>
+  <!-- CSS -->
+  <link rel="stylesheet" href="./styles/editor.css">
+  <link rel="stylesheet" href="./styles/editor-timeline.css">
+  <link rel="stylesheet" href="./styles/editor-panels.css">
+  <link rel="stylesheet" href="./styles/editor-controls.css">
+  <link rel="stylesheet" href="./styles/editor-dark.css">
+  <link rel="stylesheet" href="./styles/editor-dock.css">
+  <link rel="stylesheet" href="./styles/editor-lumetri.css">
+  <link rel="stylesheet" href="./styles/mask-overlay.css">
+  <link rel="stylesheet" href="./styles/roto-overlay.css">
+  <link rel="stylesheet" href="./styles/essential-audio.css">
+  <link rel="stylesheet" href="./styles/editor-timeline-track-header.css">
+  <link rel="stylesheet" href="./styles/editor-timeline-toolbar-tools.css">
+  <link rel="stylesheet" href="./styles/editor-timeline-ruler-nav.css">
+  <link rel="stylesheet" href="./styles/editor-timeline-clip-enhancements.css">
+  <!-- Preload critical modules to eliminate sequential discovery waterfall -->
+  <link rel="modulepreload" href="./src/lib/editor/index.js">
+  <link rel="modulepreload" href="./src/lib/editor/core/EditorState.js">
+  <link rel="modulepreload" href="./src/lib/editor/core/EventBus.js">
+  <link rel="modulepreload" href="./src/lib/editor/core/Constants.js">
+  <link rel="modulepreload" href="./src/lib/editor/core/RafScheduler.js">
+  <link rel="modulepreload" href="./src/lib/editor/playback/PlaybackEngine.js">
+  <link rel="modulepreload" href="./src/lib/editor/playback/VideoCompositor.js">
+  <link rel="modulepreload" href="./src/lib/editor/playback/AudioMixer.js">
+  <link rel="modulepreload" href="./src/lib/editor/media/RenderAheadManager.js">
+  <link rel="modulepreload" href="./src/lib/editor/media/MediaManager.js">
+  <link rel="modulepreload" href="./src/lib/editor/ui/TimelineUI.js">
+  <link rel="modulepreload" href="./src/lib/editor/ui/DockManager.js">
+  <!-- JS -->
+  <script type="module" src="./src/main.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div id="video-editor">
+      <div class="nle-editor">
+        <!-- Top Bar -->
+        <div class="nle-topbar">
+          <span class="nle-project-name">Untitled Project</span>
+          <button class="nle-save-btn" title="Save project (Ctrl+S)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/>
+              <polyline points="7 3 7 8 15 8"/>
+            </svg>
+            Save
+          </button>
+          <div class="nle-topbar-separator"></div>
+          <button class="nle-undo-btn" title="Undo (Ctrl+Z)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M3 10h10a5 5 0 0 1 0 10H9"/><polyline points="7 14 3 10 7 6"/></svg>
+          </button>
+          <button class="nle-redo-btn" title="Redo (Ctrl+Shift+Z)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 10H11a5 5 0 0 0 0 10h4"/><polyline points="17 14 21 10 17 6"/></svg>
+          </button>
+          <button class="nle-export-btn" title="Export video">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export
+          </button>
+        </div>
+
+        <!-- Menu Bar -->
+        <div class="nle-menubar">
+          <button class="nle-menu-trigger" data-menu="file">File</button>
+          <button class="nle-menu-trigger" data-menu="edit">Edit</button>
+          <button class="nle-menu-trigger" data-menu="clip">Clip</button>
+          <button class="nle-menu-trigger" data-menu="sequence">Sequence</button>
+          <button class="nle-menu-trigger" data-menu="window">Window</button>
+        </div>
+
+        <!-- Dock Root (DockManager renders split-tree here) -->
+        <div class="nle-dock-root"></div>
+
+        <!-- Panel content (extracted by DockManager at init) -->
+        <div class="nle-mid">
+          <!-- Source Monitor -->
+          <div class="nle-source-monitor" data-panel="source-monitor">
+            <div class="nle-panel-header"><span>Source</span><button class="nle-panel-close-btn" data-close-panel="source-monitor" title="Close panel">&times;</button></div>
+            <div class="nle-source-preview">
+              <!-- Video injected by SourceMonitor.js -->
+              <div class="nle-source-empty">
+                <span>No Clip Loaded</span>
+                <span class="nle-source-hint">Double-click a clip in the Project panel</span>
+              </div>
+            </div>
+            <div class="nle-source-controls">
+              <button class="nle-source-mark-in" title="Mark In (I)">In</button>
+              <button class="nle-source-mark-out" title="Mark Out (O)">Out</button>
+              <button class="nle-source-insert" title="Insert to timeline">Insert</button>
+              <div class="nle-source-marks">
+                <span>In: <span class="nle-source-in-display">—</span></span>
+                <span>Out: <span class="nle-source-out-display">—</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Resizer between source and program monitors -->
+          <div class="nle-resizer nle-resizer-vertical" data-resize="source-program"></div>
+
+          <!-- Program Monitor -->
+          <div class="nle-program-monitor" data-panel="program-monitor">
+            <div class="nle-panel-header"><span>Program</span><button class="nle-panel-close-btn" data-close-panel="program-monitor" title="Close panel">&times;</button></div>
+            <div class="nle-program-preview">
+              <canvas class="nle-program-canvas" width="960" height="540"></canvas>
+            </div>
+            <div class="nle-program-controls">
+              <select class="nle-program-zoom-select" title="Zoom Level">
+                <option value="fit" selected>Fit</option>
+                <option value="0.25">25%</option>
+                <option value="0.5">50%</option>
+                <option value="0.75">75%</option>
+                <option value="1">100%</option>
+                <option value="1.5">150%</option>
+                <option value="2">200%</option>
+                <option value="4">400%</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Bottom panels: Project + Effects + Properties -->
+          <div class="nle-bottom-panels">
+            <!-- Project Panel (Media Bin) -->
+            <div class="nle-project-panel" data-panel="project">
+              <div class="nle-panel-header">
+                <span>Project</span>
+                <button class="nle-import-btn" aria-label="Import media">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Import
+                </button>
+                <button class="nle-panel-close-btn" data-close-panel="project" title="Close panel">&times;</button>
+              </div>
+              <div class="nle-media-list">
+                <!-- Media items populated by ProjectPanel.js -->
+                <div class="nle-media-empty">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+                    <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+                    <line x1="7" y1="2" x2="7" y2="22"/>
+                    <line x1="17" y1="2" x2="17" y2="22"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                  </svg>
+                  <span>Import media to get started</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Effects Panel -->
+            <div class="nle-effects-panel" data-panel="effects">
+              <div class="nle-panel-header"><span>Effects</span><button class="nle-panel-close-btn" data-close-panel="effects" title="Close panel">&times;</button></div>
+              <input class="nle-effects-search" type="text" placeholder="Search effects...">
+              <div class="nle-effects-filters">
+                <button class="nle-effects-filter-btn active" data-type="all">All</button>
+                <button class="nle-effects-filter-btn" data-type="video">Video</button>
+                <button class="nle-effects-filter-btn" data-type="audio">Audio</button>
+                <button class="nle-effects-filter-btn" data-type="transition">Transition</button>
+              </div>
+              <div class="nle-effects-list">
+                <!-- Effects populated by EffectsPanel.js -->
+                <div class="nle-effects-empty">Drag effects onto clips in the timeline</div>
+              </div>
+            </div>
+
+            <!-- Properties Panel (basic clip info) -->
+            <div class="nle-properties-panel" data-panel="properties">
+              <div class="nle-panel-header"><span>Properties</span><button class="nle-panel-close-btn" data-close-panel="properties" title="Close panel">&times;</button></div>
+              <div class="nle-properties-content">
+                <div class="nle-props-empty">Select a clip to view properties</div>
+              </div>
+            </div>
+
+            <!-- Effect Controls Panel (split-panel with keyframe timeline) -->
+            <div class="nle-effect-controls-panel" data-panel="effect-controls">
+              <div class="nle-panel-header"><span>Effect Controls</span><button class="nle-panel-close-btn" data-close-panel="effect-controls" title="Close panel">&times;</button></div>
+              <div class="nle-ec-content">
+                <div class="nle-ec-split">
+                  <div class="nle-ec-left">
+                    <div class="nle-props-empty">Select a clip to view effect controls</div>
+                  </div>
+                  <div class="nle-ec-divider"></div>
+                  <div class="nle-ec-right">
+                    <div class="nle-ec-clip-bar"></div>
+                    <div class="nle-ec-ruler-wrap"><canvas class="nle-ec-ruler"></canvas></div>
+                    <div class="nle-ec-canvas-wrap"><canvas class="nle-ec-canvas"></canvas></div>
+                    <div class="nle-ec-zoom-wrap">
+                      <input type="range" class="nle-ec-zoom" min="1" max="100" value="100">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sequence Settings Panel -->
+            <div class="nle-seq-settings-panel" data-panel="sequence-settings">
+              <div class="nle-panel-header"><span>Sequence Settings</span><button class="nle-panel-close-btn" data-close-panel="sequence-settings" title="Close panel">&times;</button></div>
+            </div>
+
+            <!-- Audio Meters Panel -->
+            <div class="nle-audio-meters-panel" data-panel="audio-meters">
+              <div class="nle-panel-header"><span>Audio Meters</span><button class="nle-panel-close-btn" data-close-panel="audio-meters" title="Close panel">&times;</button></div>
+              <div class="nle-audio-meters-content">
+                <canvas class="nle-audio-meters-canvas"></canvas>
+              </div>
+            </div>
+
+            <!-- Essential Audio Panel -->
+            <div class="nle-essential-audio-panel" data-panel="essential-audio">
+              <div class="nle-panel-header"><span>Essential Audio</span><button class="nle-panel-close-btn" data-close-panel="essential-audio" title="Close panel">&times;</button></div>
+            </div>
+            <!-- Lumetri Color Panel -->
+            <div class="nle-lumetri-panel" data-panel="lumetri-color">
+              <div class="nle-panel-header"><span>Lumetri Color</span><button class="nle-panel-close-btn" data-close-panel="lumetri-color" title="Close panel">&times;</button></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resizer between panels and timeline -->
+        <div class="nle-resizer nle-resizer-horizontal" data-resize="mid-bottom"></div>
+
+        <!-- Bottom Section: Timeline -->
+        <div class="nle-bottom" data-panel="timeline">
+          <!-- Transport Controls -->
+          <div class="nle-transport">
+            <button class="nle-skip-back-btn" title="Go to start (Home)">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+            </button>
+            <button class="nle-play-btn" title="Play/Pause (Space)">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+            <button class="nle-stop-btn" title="Stop">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><rect x="6" y="6" width="12" height="12"/></svg>
+            </button>
+            <button class="nle-skip-fwd-btn" title="Go to end (End)">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+            </button>
+            <button class="nle-loop-btn" title="Loop (L)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            </button>
+            <span class="nle-timecode">00:00:00:00</span>
+            <select class="nle-speed-select" title="Playback speed">
+              <!-- Options populated by TransportControls.js -->
+            </select>
+            <div class="nle-transport-spacer" style="flex:1"></div>
+            <button class="nle-snap-btn active" title="Toggle Snap (S)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 4v16M20 4v16M8 12h8"/></svg>
+            </button>
+            <input type="range" class="nle-zoom-slider" min="0" max="12" value="6" step="1" title="Timeline Zoom">
+          </div>
+
+          <!-- Timeline Area -->
+          <div class="nle-timeline-area">
+            <!-- Toolbar (vertical) -->
+            <div class="nle-toolbar">
+              <!-- Premiere Pro toolbar order: V, A, B, N, C, Y, U, P, H, Z -->
+              <button class="nle-tool-btn active" data-tool="selection" title="Selection Tool (V)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 2v19l5.5-5.5H18L6 2z"/></svg>
+                </span>
+                <span class="nle-tool-key">V</span>
+              </button>
+              <button class="nle-tool-btn" data-tool="track-select" title="Track Select Forward (A)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="5" x2="4" y2="19"/><line x1="8" y1="12" x2="18" y2="12"/><path d="M15 7l5 5-5 5" fill="currentColor" stroke="none"/></svg>
+                </span>
+                <span class="nle-tool-key">A</span>
+              </button>
+              <button class="nle-tool-btn" data-tool="ripple-edit" title="Ripple Edit (B)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="6" width="8" height="12" rx="1" fill="currentColor" opacity="0.3" stroke="none"/><rect x="14" y="6" width="8" height="12" rx="1"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="10" y1="16" x2="14" y2="16"/><path d="M11 11l2 1-2 1z" fill="currentColor" stroke="none"/></svg>
+                </span>
+                <span class="nle-tool-key">B</span>
+              </button>
+              <button class="nle-tool-btn" data-tool="rolling-edit" title="Rolling Edit (N)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="6" width="8" height="12" rx="1"/><rect x="14" y="6" width="8" height="12" rx="1"/><line x1="12" y1="4" x2="12" y2="20" stroke-width="2"/></svg>
+                </span>
+                <span class="nle-tool-key">N</span>
+              </button>
+              <button class="nle-tool-btn" data-tool="razor" title="Razor (C)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="-20 -20 162 106" width="16" height="14"><g transform="rotate(45 61.44 33.1)"><path fill="currentColor" fill-rule="evenodd" d="M12.42,0H110.8c3.2,0,6.64,2.72,5.82,5.82-1.29,4.87-1.91,9,2.3,8.74a3.89,3.89,0,0,1,4,4v29.7a3.88,3.88,0,0,1-4,4c-4.2-.29-3.59,3.31-2.3,8.18.81,3.09-2.62,5.82-5.82,5.82H12.42A5.84,5.84,0,0,1,6.6,60.37c0-4.82,2.77-8.18-2.64-8.18a4,4,0,0,1-4-4V18.53a4,4,0,0,1,4-4c5.41,0,2.64-3.92,2.64-8.74A5.84,5.84,0,0,1,12.42,0Zm1.77,24.26a2.4,2.4,0,0,1,2.44,2.33v3.49a5.4,5.4,0,0,0,3.58,1.15,6,6,0,0,0,2.95-.7,6.91,6.91,0,0,1,6.32-4,7.07,7.07,0,0,1,4.36,1.49c.91.71,1.56,1.87,2.49,2.43a5.91,5.91,0,0,0,3,.74,5.3,5.3,0,0,0,3.8-1.35V26.59a2.39,2.39,0,0,1,2.44-2.33,2.4,2.4,0,0,1,2.44,2.33v3.49a5.38,5.38,0,0,0,3.58,1.15,6,6,0,0,0,3-.7,6.91,6.91,0,0,1,6.32-4,7,7,0,0,1,4.35,1.49c2.18,1.7,3.55,5,7.12,2.1V26.59a2.39,2.39,0,0,1,2.44-2.33,2.4,2.4,0,0,1,2.44,2.33v3.49a5.66,5.66,0,0,0,3.58,1.15c1.25,0,4.63-.23,5.46-.7a6.9,6.9,0,0,1,6.31-4,7,7,0,0,1,4.36,1.49c.91.71,1.56,1.87,2.5,2.43a5.87,5.87,0,0,0,3,.74,5.3,5.3,0,0,0,3.8-1.35V26.59a2.4,2.4,0,0,1,2.44-2.33,2.4,2.4,0,0,1,2.44,2.33V39.78a2.4,2.4,0,0,1-2.44,2.33,2.4,2.4,0,0,1-2.44-2.33V36.33a5.3,5.3,0,0,0-3.8-1.35,5.85,5.85,0,0,0-2.91.69c-1.13.63-1.45,1.61-2.47,2.44a7.13,7.13,0,0,1-4.49,1.61,7.22,7.22,0,0,1-6.35-4.06c-.83-.46-4.18-.68-5.42-.68a5.76,5.76,0,0,0-3.58,1.15v3.65a2.4,2.4,0,0,1-2.44,2.33,2.4,2.4,0,0,1-2.44-2.33V36.05c-3.55-2.83-4.9.35-7,2.06a7.15,7.15,0,0,1-4.49,1.61,7.24,7.24,0,0,1-6.36-4.06A6,6,0,0,0,51.61,35a5.46,5.46,0,0,0-3.58,1.15v3.65a2.4,2.4,0,0,1-2.44,2.33,2.39,2.39,0,0,1-2.44-2.33V36.33A5.3,5.3,0,0,0,39.35,35a5.89,5.89,0,0,0-2.92.69c-1.12.63-1.44,1.61-2.46,2.44a7.15,7.15,0,0,1-4.49,1.61,7.25,7.25,0,0,1-6.36-4.06A6,6,0,0,0,20.21,35a5.46,5.46,0,0,0-3.58,1.15v3.65a2.4,2.4,0,0,1-2.44,2.33,2.4,2.4,0,0,1-2.44-2.33V26.59a2.4,2.4,0,0,1,2.44-2.33Z"/></g></svg>
+                </span>
+                <span class="nle-tool-key">C</span>
+              </button>
+              <button class="nle-tool-btn" data-tool="slip" title="Slip Tool (Y)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="9" y="4" width="2" height="16" rx="1"/><rect x="13" y="4" width="2" height="16" rx="1"/><path d="M6 12L2 9v6z"/><path d="M18 12l4-3v6z"/></svg>
+                </span>
+                <span class="nle-tool-key">Y</span>
+              </button>
+              <button class="nle-tool-btn" data-tool="slide" title="Slide Tool (U)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="7" y="4" width="10" height="16" rx="1" opacity="0.3"/><path d="M4 12L0 9v6z"/><path d="M20 12l4-3v6z"/><rect x="7" y="4" width="10" height="16" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+                </span>
+                <span class="nle-tool-key">U</span>
+              </button>
+              <button class="nle-tool-btn" data-tool="pen" title="Pen Tool (P)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2" fill="currentColor" stroke="none"/></svg>
+                </span>
+                <span class="nle-tool-key">P</span>
+              </button>
+              <button class="nle-tool-btn" data-tool="hand" title="Hand Tool (H)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V7a2 2 0 00-4 0v4M14 11V5a2 2 0 00-4 0v6M10 11V7a2 2 0 00-4 0v5M6 12v-1a2 2 0 00-4 0v5a8 8 0 0016 0v-5a2 2 0 00-4 0"/></svg>
+                </span>
+                <span class="nle-tool-key">H</span>
+              </button>
+              <button class="nle-tool-btn" data-tool="zoom" title="Zoom Tool (Z)">
+                <span class="nle-tool-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="6"/><line x1="14.5" y1="14.5" x2="20" y2="20"/><line x1="10" y1="7" x2="10" y2="13" stroke-width="1.5"/><line x1="7" y1="10" x2="13" y2="10" stroke-width="1.5"/></svg>
+                </span>
+                <span class="nle-tool-key">Z</span>
+              </button>
+            </div>
+
+            <!-- Timeline Panel -->
+            <div class="nle-timeline-panel">
+              <!-- Timeline toolbar (snap, linked selection, markers, display settings) -->
+              <div class="nle-timeline-toolbar"></div>
+              <!-- Ruler -->
+              <div class="nle-timeline-ruler">
+                <canvas class="nle-ruler-canvas"></canvas>
+              </div>
+
+              <!-- Timeline Body (scrollable) -->
+              <div class="nle-timeline-body">
+                <div class="nle-timeline-tracks">
+                  <!-- Track rows populated by TimelineUI.js -->
+                </div>
+                <!-- Playhead -->
+                <div class="nle-playhead">
+                  <div class="nle-playhead-line"></div>
+                </div>
+              </div>
+
+              <!-- Add Track buttons -->
+              <div class="nle-add-track-bar">
+                <button class="nle-add-track-btn" data-type="video">+ Video Track</button>
+                <button class="nle-add-track-btn" data-type="audio">+ Audio Track</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

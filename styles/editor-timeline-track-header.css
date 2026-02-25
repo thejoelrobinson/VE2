@@ -1,0 +1,71 @@
+/* === Track Header Enhancements === */
+
+/* Icon buttons (vis, sync lock) */
+.nle-track-icon-btn {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 2px;
+  color: var(--nle-text-muted);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color 0.1s;
+}
+.nle-track-icon-btn svg {
+  width: 12px;
+  height: 12px;
+}
+.nle-track-icon-btn:hover {
+  color: var(--nle-text-secondary);
+  background: var(--nle-bg-medium);
+}
+.nle-track-icon-btn.active {
+  color: var(--nle-accent);
+}
+
+/* Hidden track visual (vis button is slashed-eye) */
+.nle-track-vis-btn.hidden {
+  color: var(--nle-text-dim);
+  opacity: 0.5;
+}
+.nle-track-row.nle-track-hidden .nle-track-lane {
+  opacity: 0.4;
+}
+.nle-track-row.nle-track-hidden .nle-track-header {
+  opacity: 0.6;
+}
+
+/* Inline rename */
+.nle-track-name[contenteditable="true"] {
+  outline: 1px solid var(--nle-accent);
+  border-radius: 2px;
+  padding: 0 3px;
+  background: var(--nle-bg-dark);
+  cursor: text;
+  min-width: 40px;
+}
+
+/* Track resize handle */
+.nle-track-resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+  z-index: var(--z-sticky);
+}
+.nle-track-resize-handle:hover {
+  background: var(--nle-accent);
+  opacity: 0.5;
+}
+
+/* Track row needs position relative for the handle */
+.nle-track-row {
+  position: relative;
+}

@@ -1,0 +1,637 @@
+/* ============================================
+   NLE Editor — Timeline: tracks, clips, ruler,
+   playhead, scrollbars
+   Styled to match Adobe Premiere Pro
+   ============================================ */
+
+/* ── Timeline toolbar (above ruler) ── */
+.nle-timeline-toolbar {
+  height: 24px;
+  background: var(--nle-bg-toolbar);
+  border-bottom: 1px solid var(--nle-bg-darkest);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.nle-tl-toolbar-left {
+  width: 180px;
+  min-width: 180px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 4px;
+}
+
+.nle-tl-toolbar-btn {
+  width: 24px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 2px;
+  color: var(--nle-text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.1s, color 0.1s;
+}
+
+.nle-tl-toolbar-btn:hover {
+  background: var(--nle-bg-medium);
+  color: var(--nle-text-secondary);
+}
+
+.nle-tl-toolbar-btn.active {
+  color: var(--nle-accent);
+}
+
+.nle-tl-toolbar-btn.active:hover {
+  color: var(--nle-accent-hover);
+}
+
+.nle-tl-toolbar-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Settings dropdown (wrench menu) */
+.nle-tl-settings-dropdown {
+  position: fixed;
+  z-index: var(--z-popover);
+  background: var(--nle-bg-dark);
+  border: 1px solid var(--nle-border-dark);
+  border-radius: 4px;
+  padding: 4px 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 180px;
+}
+
+.nle-tl-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--nle-text-secondary);
+  cursor: pointer;
+}
+
+.nle-tl-settings-item:hover {
+  background: var(--nle-bg-medium);
+}
+
+.nle-tl-settings-item input[type="checkbox"] {
+  accent-color: var(--nle-accent);
+  margin: 0;
+}
+
+/* Display toggle classes (CSS-only hide) */
+.nle-timeline-panel.hide-thumbnails .nle-clip-thumbstrip {
+  display: none;
+}
+
+.nle-timeline-panel.hide-waveforms .nle-clip-waveform-canvas {
+  display: none;
+}
+
+/* Timeline ruler */
+.nle-timeline-ruler {
+  height: 32px;
+  background: var(--nle-bg-darkest);
+  border-bottom: 1px solid var(--nle-bg-dark);
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  margin-left: 180px; /* Track header width */
+}
+
+.nle-ruler-canvas {
+  display: block;
+  contain: layout paint;
+}
+
+/* Timeline body (scrollable) */
+.nle-timeline-body {
+  flex: 1;
+  display: flex;
+  overflow: auto;
+  position: relative;
+}
+
+/* Track container */
+.nle-timeline-tracks {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Track row */
+.nle-track-row {
+  display: flex;
+  height: 48px;
+  border-bottom: 1px solid var(--nle-bg-darkest);
+}
+
+/* Track header — sticky so it stays fixed while lanes scroll horizontally */
+.nle-track-header {
+  width: 180px;
+  min-width: 180px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  background: var(--nle-bg-track);
+  border-right: 1px solid var(--nle-bg-dark);
+  user-select: none;
+  position: sticky;
+  left: 0;
+  z-index: var(--z-sticky);
+}
+
+.nle-track-header.video {
+  border-left: 3px solid var(--nle-accent);
+}
+
+.nle-track-header.audio {
+  border-left: 3px solid var(--nle-teal);
+}
+
+.nle-track-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--nle-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nle-track-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.nle-track-btn {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nle-border-subtle);
+  border: 1px solid var(--nle-border-dark);
+  border-radius: 2px;
+  color: var(--nle-text-muted);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 0;
+  transition: all 0.1s;
+}
+
+.nle-track-btn:hover {
+  background: var(--nle-border-dark);
+  color: var(--nle-text-secondary);
+}
+
+/* Mute active — red */
+.nle-track-btn.active {
+  background: var(--nle-track-mute);
+  border-color: var(--nle-track-mute);
+  color: var(--nle-white);
+}
+
+/* Solo active — yellow */
+.nle-track-btn.solo.active {
+  background: var(--nle-track-solo);
+  border-color: var(--nle-track-solo);
+  color: var(--nle-bg-darkest);
+}
+
+/* Lock active */
+.nle-track-btn.lock.active {
+  background: var(--nle-border-medium);
+  border-color: var(--nle-text-dim);
+  color: var(--nle-white);
+}
+
+/* Track lane (clip area) */
+.nle-track-lane {
+  flex: 1;
+  position: relative;
+  height: 100%;
+  min-width: var(--nle-timeline-width, 1000px);
+  background: var(--nle-bg-darkest);
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 99px,
+      #222 99px,
+      #222 100px
+    );
+}
+
+.nle-track-lane.nle-drop-target {
+  background-color: rgba(74, 144, 217, 0.08);
+  outline: 1px solid rgba(74, 144, 217, 0.5);
+  outline-offset: -1px;
+  box-shadow: inset 0 0 12px rgba(74, 144, 217, 0.15);
+}
+
+/* ── Clips ── */
+.nle-clip {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: calc(100% - 4px);
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: box-shadow 0.1s, border-color 0.1s;
+  min-width: 4px;
+  will-change: transform;
+}
+
+/* .nle-clip.video / .nle-clip.audio colors are in editor-dark.css */
+
+.nle-clip:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.nle-clip.selected {
+  border-color: var(--nle-white);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+  z-index: var(--z-overlay);
+}
+
+.nle-clip:active {
+  cursor: grabbing;
+}
+
+.nle-clip.nle-clip-drop-target {
+  border-color: var(--nle-accent);
+  box-shadow: 0 0 8px rgba(74, 144, 217, 0.4);
+}
+
+.nle-clip-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 2px 4px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  color: var(--nle-white);
+  background: rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: var(--z-embedded-low);
+  pointer-events: none;
+}
+
+.nle-clip-thumbstrip {
+  display: flex;
+  height: 100%;
+  opacity: 0.6;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+}
+
+.nle-clip-thumb {
+  height: 100%;
+  width: auto;
+  object-fit: cover;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Waveform overlay on audio clips */
+.nle-clip.audio .nle-clip-waveform,
+.nle-clip.audio .nle-clip-thumbstrip {
+  opacity: 0.4;
+}
+
+/* Waveform canvas for audio clips */
+.nle-clip-waveform-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Linked clip label — underlined like Premiere Pro */
+.nle-clip-label.nle-linked {
+  text-decoration: underline;
+}
+
+/* Trim handles */
+.nle-clip-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  z-index: var(--z-embedded);
+  transition: background 0.1s;
+}
+
+.nle-clip-handle:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.nle-clip-handle:active {
+  background: rgba(255, 200, 0, 0.3);
+}
+
+.nle-clip-handle-left {
+  left: -2px;
+  cursor: w-resize;
+  border-radius: 3px 0 0 3px;
+  border-left: 2px solid transparent;
+}
+
+.nle-clip-handle-left:hover {
+  border-left-color: rgba(255, 200, 0, 0.8);
+}
+
+.nle-clip-handle-right {
+  right: -2px;
+  cursor: e-resize;
+  border-radius: 0 3px 3px 0;
+  border-right: 2px solid transparent;
+}
+
+.nle-clip-handle-right:hover {
+  border-right-color: rgba(255, 200, 0, 0.8);
+}
+
+/* Trim tooltip (timecode delta shown near cursor during trim drag) */
+.nle-trim-tooltip {
+  position: fixed;
+  display: none;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.85);
+  color: var(--nle-trim-indicator);
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: var(--z-modal);
+  white-space: nowrap;
+}
+
+/* ── Playhead ── */
+.nle-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  z-index: var(--z-sticky);
+  pointer-events: none;
+  left: 180px; /* Track header width */
+  will-change: transform;
+}
+
+.nle-playhead-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: var(--nle-red-bright);
+  pointer-events: none;
+}
+
+/* Playhead cap is drawn by TimelineRuler canvas (red triangle).
+   The CSS ::before cap was clipped by overflow:auto on the body. Removed. */
+
+/* ── Add Track bar ── */
+.nle-add-track-bar {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  height: 28px;
+  align-items: center;
+  background: var(--nle-bg-darkest);
+  border-top: 1px solid var(--nle-bg-dark);
+}
+
+.nle-add-track-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: none;
+  border: 1px dashed var(--nle-border-dark);
+  border-radius: 3px;
+  color: var(--nle-text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  transition: all 0.15s;
+}
+
+.nle-add-track-btn:hover {
+  border-color: var(--nle-accent);
+  color: var(--nle-accent);
+}
+
+/* ── Tool Cursors ── */
+
+/* Selection — default arrow */
+.nle-timeline-panel[data-tool="selection"] .nle-track-lane,
+.nle-timeline-panel[data-tool="selection"] .nle-timeline-ruler {
+  cursor: default;
+}
+
+/* Track Select Forward — right arrow */
+.nle-timeline-panel[data-tool="track-select"] .nle-track-lane,
+.nle-timeline-panel[data-tool="track-select"] .nle-clip,
+.nle-timeline-panel[data-tool="track-select"] .nle-timeline-ruler {
+  cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><line x1="3" y1="4" x2="3" y2="20" stroke="%23fff" stroke-width="2.5"/><line x1="3" y1="4" x2="3" y2="20" stroke="%23222" stroke-width="1"/><line x1="7" y1="12" x2="18" y2="12" stroke="%23fff" stroke-width="2.5"/><line x1="7" y1="12" x2="18" y2="12" stroke="%23222" stroke-width="1"/><path d="M15 7l6 5-6 5z" fill="%23fff" stroke="%23222" stroke-width="1"/></svg>') 3 12, e-resize;
+}
+
+/* Razor / Blade — razor blade cursor */
+.nle-timeline-panel[data-tool="razor"] .nle-track-lane,
+.nle-timeline-panel[data-tool="razor"] .nle-clip,
+.nle-timeline-panel[data-tool="razor"] .nle-clip-handle,
+.nle-timeline-panel[data-tool="razor"] .nle-timeline-ruler {
+  cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="-20 -20 162 106"><g transform="rotate(45 61.44 33.1)"><path fill="%23fff" stroke="%23333" stroke-width="3" fill-rule="evenodd" d="M12.42,0H110.8c3.2,0,6.64,2.72,5.82,5.82-1.29,4.87-1.91,9,2.3,8.74a3.89,3.89,0,0,1,4,4v29.7a3.88,3.88,0,0,1-4,4c-4.2-.29-3.59,3.31-2.3,8.18.81,3.09-2.62,5.82-5.82,5.82H12.42A5.84,5.84,0,0,1,6.6,60.37c0-4.82,2.77-8.18-2.64-8.18a4,4,0,0,1-4-4V18.53a4,4,0,0,1,4-4c5.41,0,2.64-3.92,2.64-8.74A5.84,5.84,0,0,1,12.42,0Z"/></g></svg>') 4 4, crosshair;
+}
+
+/* Slip — horizontal resize */
+.nle-timeline-panel[data-tool="slip"] .nle-track-lane,
+.nle-timeline-panel[data-tool="slip"] .nle-clip,
+.nle-timeline-panel[data-tool="slip"] .nle-timeline-ruler {
+  cursor: col-resize;
+}
+
+/* Zoom — magnifier */
+.nle-timeline-panel[data-tool="zoom"] .nle-track-lane,
+.nle-timeline-panel[data-tool="zoom"] .nle-clip,
+.nle-timeline-panel[data-tool="zoom"] .nle-timeline-ruler {
+  cursor: zoom-in;
+}
+
+/* Hand — grab */
+.nle-timeline-panel[data-tool="hand"] .nle-track-lane,
+.nle-timeline-panel[data-tool="hand"] .nle-clip,
+.nle-timeline-panel[data-tool="hand"] .nle-timeline-ruler {
+  cursor: grab;
+}
+
+.nle-timeline-panel[data-tool="hand"] .nle-track-lane:active,
+.nle-timeline-panel[data-tool="hand"] .nle-clip:active {
+  cursor: grabbing;
+}
+
+/* ── Gap selection highlight ── */
+.nle-gap-highlight {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: calc(100% - 4px);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
+  z-index: var(--z-embedded-mid);
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* ── Pen tool / Rubber band overlay ── */
+.nle-clip-rubberband {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--z-embedded-mid);
+}
+
+/* Enable pointer events only when pen tool active */
+.nle-timeline-panel[data-tool="pen"] .nle-clip-rubberband {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+/* Pen cursor on clips and lanes */
+.nle-timeline-panel[data-tool="pen"] .nle-track-lane,
+.nle-timeline-panel[data-tool="pen"] .nle-clip {
+  cursor: crosshair;
+}
+
+/* ── Transition indicators ── */
+.nle-transition {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: calc(100% - 4px);
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255,255,255,0.15),
+    rgba(255,255,255,0.15) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 2px;
+  cursor: pointer;
+  z-index: var(--z-embedded);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  will-change: transform;
+}
+
+.nle-transition:hover {
+  border-color: rgba(255,255,255,0.7);
+}
+
+.nle-transition-label {
+  font-size: 9px;
+  color: rgba(255,255,255,0.8);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0 2px;
+  pointer-events: none;
+}
+
+.nle-transition.selected {
+  border-color: var(--nle-white);
+  box-shadow: 0 0 4px rgba(255,255,255,0.5);
+}
+
+.nle-transition-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: var(--z-embedded);
+}
+.nle-transition-handle.left { left: -3px; }
+.nle-transition-handle.right { right: -3px; }
+.nle-transition-handle:hover {
+  background: rgba(255,255,255,0.3);
+  border-radius: 1px;
+}
+
+/* ── FX badge on clips ── */
+.nle-clip-fx-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 9px;
+  background: rgba(255, 180, 0, 0.85);
+  color: var(--nle-black);
+  padding: 0 3px;
+  border-radius: 2px;
+  line-height: 14px;
+  pointer-events: none;
+  z-index: var(--z-embedded-low);
+}
+
+/* ── Drag ghost: edit mode visual feedback on clips ── */
+.nle-clip[data-edit-mode="overwrite"] {
+  box-shadow: 0 0 8px rgba(224, 108, 117, 0.4);
+  border-color: rgba(224, 108, 117, 0.6);
+}
+
+.nle-clip[data-edit-mode="insert"] {
+  box-shadow: 0 0 8px rgba(152, 195, 121, 0.4);
+  border-color: rgba(152, 195, 121, 0.6);
+}
+
+.nle-clip[data-edit-mode="replace"] {
+  box-shadow: 0 0 8px rgba(229, 192, 123, 0.4);
+  border-color: rgba(229, 192, 123, 0.6);
+}
+
+/* ── Marquee selection rectangle ── */
+.nle-marquee-selection {
+  position: fixed;
+  border: 1px solid rgba(74, 144, 217, 0.8);
+  background: rgba(74, 144, 217, 0.15);
+  z-index: var(--z-sticky);
+  pointer-events: none;
+}
+
+/* ── Hidden utility ── */
+.nle-hidden {
+  display: none !important;
+}

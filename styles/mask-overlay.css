@@ -1,0 +1,178 @@
+/* ── Mask Overlay ── */
+.nle-mask-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--z-overlay-roto); /* Above transform overlay */
+}
+
+/* ── Mask Properties Section ── */
+.nle-mask-section {
+  border-left: 2px solid var(--nle-mask-editable);
+}
+
+.nle-mask-name {
+  flex: 1;
+  font-size: 11px;
+  color: var(--nle-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nle-mask-add-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+}
+
+.nle-mask-add-btn {
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px dashed rgba(0, 255, 136, 0.4);
+  color: var(--nle-mask-editable);
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  width: 100%;
+  transition: background 0.15s;
+}
+.nle-mask-add-btn:hover {
+  background: rgba(0, 255, 136, 0.2);
+}
+
+.nle-mask-tool-bar {
+  display: flex;
+  gap: 2px;
+}
+
+.nle-mask-tool-btn {
+  flex: 1;
+  background: var(--nle-bg-dark);
+  border: 1px solid var(--nle-border-dark);
+  color: var(--nle-text-label);
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  transition: background 0.15s, color 0.15s;
+}
+.nle-mask-tool-btn:hover {
+  background: var(--nle-border-dark);
+  color: var(--nle-text-light);
+}
+.nle-mask-tool-btn.active {
+  background: rgba(0, 255, 136, 0.2);
+  border-color: var(--nle-mask-editable);
+  color: var(--nle-mask-editable);
+}
+
+.nle-mask-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.nle-mask-edit-btn {
+  background: var(--nle-bg-dark);
+  border: 1px solid var(--nle-border-medium);
+  color: var(--nle-text-secondary);
+  padding: 3px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.15s;
+}
+.nle-mask-edit-btn:hover {
+  background: var(--nle-border-dark);
+  border-color: var(--nle-mask-editable);
+  color: var(--nle-mask-editable);
+}
+
+.nle-mask-path-kf-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nle-mask-track-row {
+  display: flex;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.nle-mask-track-btn {
+  flex: 1;
+  background: var(--nle-bg-dark);
+  border: 1px solid var(--nle-border-dark);
+  color: var(--nle-text-label);
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  transition: background 0.15s, color 0.15s;
+}
+.nle-mask-track-btn:hover {
+  background: var(--nle-border-dark);
+  color: var(--nle-text-light);
+}
+
+.nle-mask-track-cancel {
+  background: rgba(204, 51, 51, 0.2);
+  border-color: rgba(204, 51, 51, 0.5);
+  color: rgba(238, 136, 136, 1);
+}
+.nle-mask-track-cancel:hover {
+  background: rgba(204, 51, 51, 0.3);
+  color: rgba(255, 170, 170, 1);
+}
+
+.nle-mask-track-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--nle-bg-dark);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.nle-mask-track-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--nle-mask-editable);
+  border-radius: 2px;
+  transition: width 0.15s;
+}
+
+.nle-prop-select {
+  background: var(--nle-bg-dark);
+  color: var(--nle-text-secondary);
+  border: 1px solid var(--nle-border-dark);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 11px;
+  outline: none;
+  flex: 1;
+}
+.nle-prop-select:focus {
+
+
+.nle-prop-select:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  border-color: var(--nle-accent);
+}
+
+/* ── Toolbar Separator ── */
+.nle-toolbar-separator {
+  width: 100%;
+  height: 1px;
+  background: var(--nle-border-dark);
+  margin: 2px 0;
+}

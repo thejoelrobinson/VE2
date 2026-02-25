@@ -1,0 +1,1177 @@
+/* ============================================
+   NLE Editor — CSS Custom Properties
+   ============================================ */
+:root {
+  /* -- Accent / Brand -- */
+  --nle-accent: #4a90d9;
+  --nle-accent-hover: #5a9ee6;
+
+  /* -- Backgrounds (darkest → lightest) -- */
+  --nle-black: #000;
+  --nle-bg-deep: #111;
+  --nle-bg-darkest: #1a1a1a;
+  --nle-bg-input: #1e1e1e;
+  --nle-bg-dark: #2a2a2a;
+  --nle-bg-panel: #232323;
+  --nle-bg-track: #252525;
+  --nle-bg-toolbar: #2b2b2b;
+  --nle-bg-menubar: #2d2d2d;
+  --nle-bg-medium: #3a3a3a;
+
+  /* -- Borders -- */
+  --nle-border-subtle: #333;
+  --nle-border-dark: #444;
+  --nle-border-medium: #555;
+  --nle-border-light: #666;
+
+  /* -- Text (dimmest → brightest) -- */
+  --nle-text-dim: #666;
+  --nle-text-subtle: #777;
+  --nle-text-muted: #888;
+  --nle-text-disabled: #999;
+  --nle-text-label: #aaa;
+  --nle-text-light: #bbb;
+  --nle-text-secondary: #ccc;
+  --nle-text: #d4d4d4;
+  --nle-text-hover: #ddd;
+  --nle-text-bright: #e0e0e0;
+  --nle-white: #fff;
+
+  /* -- Semantic / Status Colors -- */
+  --nle-yellow: #e5c07b;
+  --nle-red: #e06c75;
+  --nle-red-bright: #ff3b30;
+  --nle-green: #30d158;
+  --nle-teal: #56b6c2;
+
+  /* -- Feature-Specific Colors -- */
+  --nle-mask-editable: #30d158;
+  --nle-mask-protected: #e06c75;
+  --nle-mask-overlay: #7bb8e8;
+  --nle-roto-primary: #0088cc;
+  --nle-roto-accent: #66ccff;
+  --nle-roto-fg: #6c6;
+  --nle-roto-bg: #c66;
+  --nle-track-mute: #cc3333;
+  --nle-track-solo: #c8a62c;
+  --nle-track-active: #7bb8e8;
+  --nle-track-bg-selected: #2a4a6a;
+  --nle-track-bg-selected-hover: #2e5278;
+  --nle-track-icon-selected: #7bb8e8;
+  --nle-trim-indicator: #ffc800;
+  --nle-progress-bar: #42a5f5;
+  --nle-dialog-accent: #0078d4;
+
+  /* ──────────────────────────────────────
+     SPACING SCALE
+     ────────────────────────────────────── */
+  --spacing-xs: 4px;
+  --spacing-sm: 6px;
+  --spacing-md: 8px;
+  --spacing-lg: 10px;
+  --spacing-xl: 12px;
+  --spacing-2xl: 16px;
+  --spacing-3xl: 20px;
+
+  /* ──────────────────────────────────────
+     TRANSITIONS
+     ────────────────────────────────────── */
+  --transition-fast: 0.1s;
+  --transition-standard: 0.12s;
+  --transition-slow: 0.15s;
+  --transition-easing: ease-out;
+  --transition-fast-standard: background 0.1s, color 0.1s;
+  --transition-standard-standard: background 0.15s;
+
+  /* ──────────────────────────────────────
+     Z-INDEX SCALE (Semantic Stacking Context)
+     ────────────────────────────────────── */
+  /* Z-index hierarchy (base layer → topmost):
+     1. --z-base (0): default stacking
+     2. --z-embedded (2-6): embedded UI elements (timeline tracks, clips)
+     3. --z-overlay (10-50): overlay content (transform handles, roto tools)
+     4. --z-sticky (100): sticky headers, toolbars
+     5. --z-floating (1000): main editor window, floating panels
+     6. --z-popover (3000-5000): context menus, dropdowns
+     7. --z-modal (10000): modal dialogs, overlays
+  */
+  --z-base: 0;
+  --z-embedded-low: 2;
+  --z-embedded-mid: 3;
+  --z-embedded: 5;
+  --z-overlay: 10;
+  --z-overlay-transform: 12;
+  --z-overlay-roto: 11;
+  --z-sticky: 100;
+  --z-floating: 1000;
+  --z-popover: 3000;
+  --z-modal: 10000;
+
+  /* ──────────────────────────────────────
+     TYPOGRAPHY
+     ────────────────────────────────────── */
+  --font-mono: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  --font-system: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* ──────────────────────────────────────
+     SCROLLBARS
+     ────────────────────────────────────── */
+  --nle-scrollbar-width: 6px;
+  --nle-scrollbar-track-bg: transparent;
+  --nle-scrollbar-thumb-bg: var(--nle-bg-medium);
+  --nle-scrollbar-thumb-hover-bg: #4a4a4a;
+  --nle-scrollbar-thumb-radius: 3px;
+
+  /* ──────────────────────────────────────
+     FOCUS STATES
+     ────────────────────────────────────── */
+  --nle-focus-outline: 2px solid var(--nle-accent);
+  --nle-focus-outline-offset: 1px;
+}
+
+/* ============================================
+   NLE Editor — Main Layout Grid
+   Premiere Pro-style dark theme
+   ============================================ */
+
+/* Editor screen takes full viewport when active */
+#video-editor {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-floating);
+  background: var(--nle-bg-darkest);
+  color: var(--nle-text);
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+#video-editor.hidden {
+  display: none;
+}
+
+/* Global dark form element styling */
+#video-editor input,
+#video-editor select,
+#video-editor textarea,
+#video-editor button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+#video-editor input[type="text"],
+#video-editor input[type="search"],
+#video-editor input[type="number"],
+#video-editor select,
+#video-editor textarea {
+  background: var(--nle-bg-input);
+  color: var(--nle-text);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 3px;
+  outline: none;
+}
+
+#video-editor input[type="text"]:focus-visible,
+#video-editor input[type="search"]:focus-visible,
+#video-editor textarea:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+#video-editor input[type="text"]:focus,
+#video-editor input[type="search"]:focus,
+#video-editor textarea:focus {
+  border-color: var(--nle-accent);
+}
+
+/* Hidden panel utility */
+.nle-hidden { display: none !important; }
+
+/* Main layout (flex column: topbar + menubar + dock-root) */
+.nle-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ── Top Bar ── */
+.nle-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, var(--nle-bg-medium), var(--nle-bg-menubar));
+  border-bottom: 1px solid var(--nle-bg-darkest);
+  flex-shrink: 0;
+}
+
+.nle-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid var(--nle-border-medium);
+  border-radius: 4px;
+  color: var(--nle-text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.15s;
+}
+
+.nle-back-btn:hover {
+  background: var(--nle-bg-medium);
+}
+
+.nle-back-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+.nle-back-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nle-project-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--nle-text-bright);
+  flex: 1;
+}
+
+.nle-save-btn,
+.nle-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--nle-bg-medium);
+  border: 1px solid var(--nle-border-medium);
+  border-radius: 4px;
+  color: var(--nle-text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.15s;
+}
+
+.nle-save-btn:hover {
+  background: var(--nle-border-dark);
+  color: var(--nle-white);
+}
+
+.nle-save-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+.nle-export-btn {
+  background: var(--nle-accent);
+  border-color: var(--nle-accent);
+  color: var(--nle-white);
+}
+
+.nle-export-btn:hover {
+  background: var(--nle-accent-hover);
+}
+
+.nle-export-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+/* Topbar separator */
+.nle-topbar-separator {
+  width: 1px;
+  height: 18px;
+  background: var(--nle-border-dark);
+  flex-shrink: 0;
+}
+
+/* Undo / Redo buttons */
+.nle-undo-btn,
+.nle-redo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--nle-text-disabled);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nle-undo-btn:hover,
+.nle-redo-btn:hover {
+  background: var(--nle-bg-medium);
+  color: var(--nle-white);
+}
+
+.nle-undo-btn:focus-visible,
+.nle-redo-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+/* Workspace selector in topbar */
+.nle-workspace-select {
+  background: var(--nle-bg-menubar);
+  border: 1px solid var(--nle-border-dark);
+  border-radius: 3px;
+  color: var(--nle-text-secondary);
+  font-size: 11px;
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+.nle-workspace-select:hover {
+  border-color: var(--nle-text-dim);
+}
+
+.nle-workspace-select:focus {
+  border-color: var(--nle-accent);
+}
+
+.nle-workspace-select:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+/* Menu check mark */
+.nle-menu-check {
+  font-size: 11px;
+  width: 16px;
+  display: inline-block;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ── Menu Bar ── */
+.nle-menubar {
+  flex-shrink: 0;
+}
+
+/* ── Source Monitor ── */
+.nle-source-monitor {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Program Monitor ── */
+.nle-program-monitor {
+  display: flex;
+  flex-direction: column;
+  background: var(--nle-bg-panel);
+  border-bottom: 1px solid var(--nle-bg-darkest);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.nle-program-preview {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nle-bg-deep);
+  padding: 8px;
+  overflow: hidden;
+}
+
+.nle-transform-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--z-overlay-transform);
+}
+
+.nle-program-canvas {
+  display: block;
+  background: var(--nle-black);
+  border-radius: 2px;
+  max-width: 100%;
+  max-height: 100%;
+  contain: layout paint;
+}
+
+/* Program Monitor — Zoom controls bar */
+.nle-program-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--nle-bg-toolbar);
+  border-top: 1px solid var(--nle-border-subtle);
+  flex-shrink: 0;
+}
+
+.nle-program-zoom-select {
+  background: var(--nle-bg-menubar);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 3px;
+  color: var(--nle-text-secondary);
+  font-size: 11px;
+  padding: 2px 4px;
+  cursor: pointer;
+  outline: none;
+}
+
+.nle-program-zoom-select:hover {
+  border-color: var(--nle-text-dim);
+}
+
+.nle-program-zoom-select:focus {
+  border-color: var(--nle-accent);
+}
+
+.nle-program-zoom-select:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+/* Scrollable preview when zoomed to a fixed level */
+.nle-program-preview.zoomed {
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.nle-program-preview.zoomed .nle-program-canvas {
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  flex-shrink: 0;
+}
+
+/* Thin dark scrollbars for zoomed preview */
+.nle-program-preview.zoomed::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.nle-program-preview.zoomed::-webkit-scrollbar-track {
+  background: var(--nle-bg-deep);
+}
+
+.nle-program-preview.zoomed::-webkit-scrollbar-thumb {
+  background: var(--nle-border-dark);
+  border-radius: 4px;
+}
+
+.nle-program-preview.zoomed::-webkit-scrollbar-thumb:hover {
+  background: var(--nle-border-medium);
+}
+
+/* ── Consolidated Scrollbar Styles ── */
+
+/* Timeline body scrollbar */
+.nle-timeline-body::-webkit-scrollbar {
+  width: var(--nle-scrollbar-width);
+  height: var(--nle-scrollbar-width);
+}
+
+.nle-timeline-body::-webkit-scrollbar-track {
+  background: var(--nle-bg-darkest);
+}
+
+.nle-timeline-body::-webkit-scrollbar-thumb {
+  background: var(--nle-scrollbar-thumb-bg);
+  border-radius: var(--nle-scrollbar-thumb-radius);
+}
+
+.nle-timeline-body::-webkit-scrollbar-thumb:hover {
+  background: var(--nle-border-medium);
+}
+
+.nle-timeline-body::-webkit-scrollbar-corner {
+  background: var(--nle-bg-darkest);
+}
+
+/* Effects panel scrollbar */
+.nle-effects-list::-webkit-scrollbar {
+  width: var(--nle-scrollbar-width);
+}
+
+.nle-effects-list::-webkit-scrollbar-track {
+  background: var(--nle-scrollbar-track-bg);
+}
+
+.nle-effects-list::-webkit-scrollbar-thumb {
+  background: var(--nle-scrollbar-thumb-bg);
+  border-radius: var(--nle-scrollbar-thumb-radius);
+}
+
+.nle-effects-list::-webkit-scrollbar-thumb:hover {
+  background: var(--nle-scrollbar-thumb-hover-bg);
+}
+
+/* Properties panel scrollbar */
+.nle-properties-content::-webkit-scrollbar {
+  width: var(--nle-scrollbar-width);
+}
+
+.nle-properties-content::-webkit-scrollbar-track {
+  background: var(--nle-scrollbar-track-bg);
+}
+
+.nle-properties-content::-webkit-scrollbar-thumb {
+  background: var(--nle-scrollbar-thumb-bg);
+  border-radius: var(--nle-scrollbar-thumb-radius);
+}
+
+.nle-properties-content::-webkit-scrollbar-thumb:hover {
+  background: var(--nle-scrollbar-thumb-hover-bg);
+}
+
+/* Effect Controls left panel scrollbar */
+.nle-ec-left::-webkit-scrollbar {
+  width: var(--nle-scrollbar-width);
+}
+
+.nle-ec-left::-webkit-scrollbar-track {
+  background: var(--nle-scrollbar-track-bg);
+}
+
+.nle-ec-left::-webkit-scrollbar-thumb {
+  background: var(--nle-scrollbar-thumb-bg);
+  border-radius: var(--nle-scrollbar-thumb-radius);
+}
+
+.nle-ec-left::-webkit-scrollbar-thumb:hover {
+  background: var(--nle-scrollbar-thumb-hover-bg);
+}
+
+/* Tab bar scrollbar */
+.nle-tab-bar::-webkit-scrollbar {
+  height: 2px;
+}
+
+.nle-tab-bar::-webkit-scrollbar-track {
+  background: var(--nle-scrollbar-track-bg);
+}
+
+.nle-tab-bar::-webkit-scrollbar-thumb {
+  background: var(--nle-scrollbar-thumb-bg);
+  border-radius: 1px;
+}
+
+/* Lumetri scrollbar */
+.nle-lumetri-content::-webkit-scrollbar {
+  width: var(--nle-scrollbar-width);
+}
+
+.nle-lumetri-content::-webkit-scrollbar-track {
+  background: var(--nle-bg-input);
+}
+
+.nle-lumetri-content::-webkit-scrollbar-thumb {
+  background: var(--nle-border-dark);
+  border-radius: var(--nle-scrollbar-thumb-radius);
+}
+
+.nle-lumetri-content::-webkit-scrollbar-thumb:hover {
+  background: var(--nle-border-medium);
+}
+
+/* Bottom panels row: Project + Effects + Properties */
+.nle-bottom-panels {
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Project Panel (media bin + sequences) */
+.nle-project-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--nle-bg-panel);
+  border-right: 1px solid var(--nle-bg-darkest);
+  overflow: hidden;
+}
+
+/* Sequence section */
+.nle-sequence-section {
+  flex-shrink: 0;
+}
+
+.nle-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--nle-text-disabled);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nle-new-seq-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--nle-text-disabled);
+  cursor: pointer;
+  padding: 0;
+}
+.nle-new-seq-btn:hover {
+  background: var(--nle-bg-medium);
+  color: var(--nle-text-hover);
+  border-color: var(--nle-border-medium);
+}
+
+.nle-new-seq-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+.nle-sequence-list {
+  padding: 0 4px 4px;
+}
+
+.nle-sequence-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+.nle-sequence-item:hover {
+  background: var(--nle-border-subtle);
+}
+.nle-sequence-item.active {
+  background: #2a4a6a;
+}
+.nle-sequence-item.active:hover {
+  background: #2e5278;
+}
+
+.nle-seq-icon {
+  flex-shrink: 0;
+  color: var(--nle-text-label);
+  display: flex;
+  align-items: center;
+}
+.nle-sequence-item.active .nle-seq-icon {
+  color: #7bb8e8;
+}
+
+.nle-seq-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.nle-seq-item-name {
+  font-size: 11px;
+  color: var(--nle-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nle-seq-item-meta {
+  font-size: 9px;
+  color: var(--nle-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.nle-section-divider {
+  height: 1px;
+  background: var(--nle-border-subtle);
+  margin: 4px 8px;
+}
+
+/* New Sequence Dialog */
+.nle-seq-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+}
+
+.nle-seq-dialog {
+  background: var(--nle-bg-dark);
+  border: 1px solid var(--nle-border-dark);
+  border-radius: 6px;
+  width: 320px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.nle-seq-dialog-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nle-text-hover);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--nle-border-subtle);
+}
+
+.nle-seq-dialog-body {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nle-seq-dialog-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--nle-text-label);
+}
+
+.nle-seq-dialog-input {
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-border-dark);
+  border-radius: 3px;
+  color: var(--nle-text-hover);
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+}
+.nle-seq-dialog-input:focus {
+
+
+.nle-seq-dialog-input:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  border-color: var(--nle-accent);
+}
+
+.nle-seq-dialog-select {
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-border-dark);
+  border-radius: 3px;
+  color: var(--nle-text-hover);
+  padding: 4px 6px;
+  font-size: 11px;
+  outline: none;
+}
+
+.nle-seq-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--nle-border-subtle);
+}
+
+.nle-seq-dialog-btn {
+  padding: 5px 14px;
+  font-size: 11px;
+  border-radius: 3px;
+  border: 1px solid var(--nle-border-medium);
+  cursor: pointer;
+  color: var(--nle-text-secondary);
+  background: var(--nle-bg-medium);
+}
+.nle-seq-dialog-btn:hover {
+
+
+.nle-seq-dialog-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  background: #4a4a4a;
+}
+.nle-seq-dialog-btn.ok {
+  background: var(--nle-accent);
+  border-color: var(--nle-accent);
+  color: var(--nle-white);
+}
+.nle-seq-dialog-btn.ok:hover {
+  background: #5aa0e9;
+}
+
+.nle-import-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--nle-bg-medium);
+  border: 1px solid var(--nle-border-medium);
+  border-radius: 3px;
+  color: var(--nle-text-secondary);
+  cursor: pointer;
+  font-size: 10px;
+  transition: background 0.15s;
+}
+
+.nle-import-btn:hover {
+  background: var(--nle-accent);
+  color: var(--nle-white);
+  border-color: var(--nle-accent);
+}
+
+.nle-import-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+.nle-import-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Media list */
+.nle-media-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.nle-media-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: var(--nle-text-dim);
+  text-align: center;
+}
+
+.nle-media-empty svg {
+  opacity: 0.4;
+}
+
+.nle-media-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: grab;
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.nle-media-item:hover {
+  background: var(--nle-border-subtle);
+}
+
+.nle-media-item:active {
+  cursor: grabbing;
+}
+
+.nle-media-thumb {
+  width: 48px;
+  height: 32px;
+  background-color: var(--nle-border-subtle);
+  background-size: cover;
+  background-position: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.nle-media-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nle-media-name {
+  font-size: 11px;
+  color: var(--nle-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nle-media-duration {
+  font-size: 10px;
+  color: var(--nle-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.nle-drag-over {
+  outline: 2px dashed var(--nle-accent);
+  outline-offset: -2px;
+}
+
+/* ── Bottom section (timeline) ── */
+.nle-bottom {
+  display: flex;
+  flex-direction: column;
+  background: var(--nle-bg-darkest);
+  border-top: none;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Transport bar */
+.nle-transport {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--nle-bg-toolbar);
+  border-bottom: 1px solid var(--nle-bg-darkest);
+}
+
+.nle-transport button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--nle-text-light);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.nle-transport button:hover {
+
+
+.nle-transport button:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  background: var(--nle-bg-medium);
+  color: var(--nle-white);
+}
+
+.nle-transport button.active {
+  color: var(--nle-accent);
+}
+
+.nle-transport button.playing {
+  color: var(--nle-accent);
+}
+
+.nle-timecode {
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--nle-accent);
+  padding: 2px 8px;
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 3px;
+  letter-spacing: 1px;
+  margin: 0 8px;
+  min-width: 100px;
+  text-align: center;
+  cursor: ew-resize;
+  user-select: none;
+}
+
+.nle-speed-select {
+  background: var(--nle-bg-menubar);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 3px;
+  color: var(--nle-text-secondary);
+  font-size: 11px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.nle-transport-spacer {
+  flex: 1;
+}
+
+/* Snap toggle */
+.nle-snap-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--nle-text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.nle-snap-btn:hover {
+
+
+.nle-snap-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  background: var(--nle-bg-medium);
+  color: var(--nle-text-secondary);
+}
+
+.nle-snap-btn.active {
+  color: var(--nle-accent);
+}
+
+/* Timeline zoom slider */
+.nle-zoom-slider {
+  width: 120px;
+  height: 3px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--nle-bg-dark);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--nle-accent);
+}
+
+.nle-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--nle-text-dim);
+  cursor: pointer;
+  border: none;
+}
+
+.nle-zoom-slider::-webkit-slider-thumb:hover {
+
+
+.nle-zoom-slider:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  background: var(--nle-accent);
+}
+
+/* Timeline area */
+.nle-timeline-area {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Toolbar (vertical, left side) */
+.nle-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 3px;
+  background: var(--nle-bg-toolbar);
+  border-right: 1px solid var(--nle-bg-darkest);
+  width: 38px;
+  flex-shrink: 0;
+}
+
+.nle-tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 30px;
+  height: 34px;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 3px;
+  color: var(--nle-text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  position: relative;
+  padding: 2px 0;
+}
+
+.nle-tool-btn:hover {
+
+
+.nle-tool-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  background: #383838;
+  color: var(--nle-text-secondary);
+}
+
+.nle-tool-btn.active {
+  background: #2f3640;
+  border-left-color: var(--nle-accent);
+  color: var(--nle-accent);
+}
+
+.nle-tool-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  line-height: 0;
+}
+
+.nle-tool-icon svg {
+  display: block;
+}
+
+.nle-tool-key {
+  font-size: 8px;
+  font-weight: 500;
+  opacity: 0.45;
+  line-height: 1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── Source Monitor empty state ── */
+.nle-source-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--nle-border-medium);
+  font-size: 12px;
+  height: 100%;
+  width: 100%;
+}
+
+.nle-source-hint {
+  font-size: 10px;
+  color: var(--nle-border-dark);
+}
+
+/* Timeline panel */
+.nle-timeline-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}

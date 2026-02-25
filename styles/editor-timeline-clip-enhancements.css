@@ -1,0 +1,42 @@
+/* === Clip Enhancements === */
+
+/* Speed badge */
+.nle-clip-speed-badge {
+  position: absolute;
+  bottom: 2px;
+  left: 4px;
+  font-size: 9px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #f39c12;
+  padding: 0 3px;
+  border-radius: 2px;
+  line-height: 14px;
+  pointer-events: none;
+  z-index: 3;
+  font-weight: 600;
+}
+
+/* Disabled clip */
+.nle-clip.nle-clip-disabled {
+  opacity: 0.35;
+  filter: saturate(0.2);
+}
+.nle-clip.nle-clip-disabled .nle-clip-label {
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Label color tint */
+.nle-clip.nle-clip-labeled {
+  border-top: 2px solid var(--clip-label-color);
+}
+/* Slight tint on the clip body using the label color */
+.nle-clip.nle-clip-labeled::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--clip-label-color);
+  opacity: 0.08;
+  pointer-events: none;
+  border-radius: inherit;
+}

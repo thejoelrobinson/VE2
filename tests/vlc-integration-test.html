@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>VLC Worker Integration Test</title>
+<style>
+  body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
+  .test { margin: 8px 0; padding: 6px 12px; border-radius: 4px; }
+  .pass { background: #1b4332; color: #95d5b2; }
+  .fail { background: #4a1520; color: #f4978e; }
+  .info { background: #1b2838; color: #a8dadc; }
+  .warn { background: #3d2e00; color: #ffd166; }
+  h1 { color: #e0aaff; }
+  #file-input { margin: 16px 0; padding: 8px; }
+  canvas { border: 1px solid #333; margin: 8px 0; display: block; }
+  #summary { margin-top: 24px; padding: 16px; border-radius: 8px; font-size: 1.2em; }
+</style>
+</head>
+<body>
+<h1>VLC Worker Integration Test</h1>
+<p>VLC.js runs in a dedicated Web Worker — no ASYNCIFY deadlocks possible.</p>
+<input type="file" id="file-input" accept=".mxf,.MXF">
+<div id="progress"></div>
+<canvas id="preview" width="640" height="360"></canvas>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script type="module">
+import { createVLCBridge } from '../src/lib/editor/media/VLCBridge.js';
+
+const results = document.getElementById('results');
+const progress = document.getElementById('progress');
+const summary = document.getElementById('summary');
+const canvas = document.getElementById('preview');
+const ctx = canvas.getContext('2d');
+
+let passed = 0, failed = 0, warnings = 0;
+
+function log(msg, type = 'info') {
+  const div = document.createElement('div');
+  div.className = `test ${type}`;
+  div.textContent = msg;
+  results.appendChild(div);
+  if (type === 'pass') passed++;
+  if (type === 'fail') failed++;
+  if (type === 'warn') warnings++;
+}
+
+function setProgress(msg) { progress.textContent = msg; }
+
+function assert(condition, passMsg, failMsg) {
+  if (condition) log(`PASS: ${passMsg}`, 'pass');
+  else log(`FAIL: ${failMsg}`, 'fail');
+}
+
+document.getElementById('file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  results.innerHTML = '';
+  passed = 0; failed = 0; warnings = 0;
+
+  log(`Testing with: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`, 'info');
+  const bridge = createVLCBridge('test-' + Date.now());
+
+  // ═══ TEST 1: Worker initialization ═══
+  log('--- Test 1: Worker Init ---', 'info');
+  setProgress('Initializing VLC Worker...');
+  const initStart = performance.now();
+  try {
+    await bridge.initialize();
+    const initMs = (performance.now() - initStart).toFixed(0);
+    assert(bridge.isInitialized(), `Worker initialized in ${initMs}ms`, 'Worker failed to init');
+  } catch (err) {
+    log(`FAIL: Init error: ${err.message}`, 'fail');
+    return;
+  }
+
+  // ═══ TEST 2: File probe ═══
+  log('--- Test 2: File Probe ---', 'info');
+  setProgress('Probing MXF file via worker...');
+  let probeResult;
+  try {
+    const probeStart = performance.now();
+    probeResult = await bridge.loadFile(file);
+    const probeMs = (performance.now() - probeStart).toFixed(0);
+    log(`Probe: ${probeResult.durationMs}ms, ${probeResult.width}x${probeResult.height}, ${probeResult.fps.toFixed(1)}fps`, 'info');
+    assert(probeResult.durationMs > 0, `Duration: ${probeResult.durationMs}ms (${probeMs}ms)`, 'No duration');
+    assert(probeResult.width > 0, `Resolution: ${probeResult.width}x${probeResult.height}`, 'No resolution');
+    assert(probeResult.fps >= 5 && probeResult.fps <= 120, `FPS: ${probeResult.fps.toFixed(1)}`, 'FPS out of range');
+  } catch (err) {
+    log(`FAIL: Probe error: ${err.message}`, 'fail');
+    return;
+  }
+
+  // ═══ TEST 3: Frame decode (worker round-trip) ═══
+  log('--- Test 3: Frame Decode ---', 'info');
+  setProgress('Decoding frame via worker...');
+  try {
+    const t0 = performance.now();
+    const frame = await bridge.getFrameAt(0.5);
+    const decodeMs = (performance.now() - t0).toFixed(0);
+    assert(frame !== null, `Frame decoded in ${decodeMs}ms`, 'Frame is null');
+    if (frame) {
+      assert(frame.width > 0 && frame.height > 0, `ImageBitmap: ${frame.width}x${frame.height}`, 'Bad dimensions');
+      canvas.width = 640;
+      canvas.height = Math.round(640 * frame.height / frame.width);
+      ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+    }
+  } catch (err) {
+    log(`FAIL: Decode error: ${err.message}`, 'fail');
+  }
+
+  // ═══ TEST 4: L1 cache hit ═══
+  log('--- Test 4: L1 Cache Hit ---', 'info');
+  try {
+    const frame1 = await bridge.getFrameAt(0.5);
+    const t0 = performance.now();
+    const frame2 = await bridge.getFrameAt(0.5);
+    const hitMs = (performance.now() - t0).toFixed(1);
+    assert(frame2 !== null, `L1 cache hit in ${hitMs}ms`, 'L1 miss');
+    assert(frame2 === frame1, 'Returns same reference (no clone)', 'Different reference');
+  } catch (err) {
+    log(`FAIL: Cache test error: ${err.message}`, 'fail');
+  }
+
+  // ═══ TEST 5: Cache lookup performance ═══
+  log('--- Test 5: Cache Lookup Perf ---', 'info');
+  try {
+    const fps = probeResult.fps;
+    const frameDur = 1 / fps;
+    const count = Math.min(20, Math.floor(probeResult.durationMs / 1000 * fps));
+    for (let i = 0; i < count; i++) await bridge.getFrameAt(i * frameDur);
+    const lookups = 10000;
+    const t0 = performance.now();
+    for (let i = 0; i < lookups; i++) bridge.getFrameAt((i % count) * frameDur);
+    const lookupMs = performance.now() - t0;
+    assert(lookupMs < 100, `${lookups} lookups in ${lookupMs.toFixed(1)}ms (${(lookupMs / lookups * 1000).toFixed(1)}us/lookup)`, `Too slow: ${lookupMs.toFixed(1)}ms`);
+  } catch (err) {
+    log(`FAIL: Lookup test error: ${err.message}`, 'fail');
+  }
+
+  // ═══ TEST 6: Playback simulation ═══
+  log('--- Test 6: Playback (3s) ---', 'info');
+  setProgress('Simulating playback...');
+  try {
+    const fps = probeResult.fps;
+    const frameDur = 1 / fps;
+    const totalFrames = Math.min(Math.floor(3 * fps), Math.floor(probeResult.durationMs / 1000 * fps));
+
+    bridge.setPlaybackActive(true, 0);
+    await new Promise(r => setTimeout(r, 500));
+
+    let decoded = 0, dropped = 0;
+    const frameTimes = [];
+    for (let i = 0; i < totalFrames; i++) {
+      const t0 = performance.now();
+      const frame = await bridge.getFrameAt(i * frameDur);
+      frameTimes.push(performance.now() - t0);
+      if (frame) { decoded++; if (i % 3 === 0) ctx.drawImage(frame, 0, 0, canvas.width, canvas.height); }
+      else dropped++;
+    }
+    bridge.setPlaybackActive(false);
+
+    const avg = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
+    const p95 = frameTimes.sort((a, b) => a - b)[Math.floor(frameTimes.length * 0.95)];
+    const hits = frameTimes.filter(t => t < 5).length;
+    log(`${decoded} decoded, ${dropped} dropped, avg=${avg.toFixed(1)}ms, P95=${p95.toFixed(1)}ms, cache=${hits}/${frameTimes.length}`, 'info');
+    assert(decoded > 0, `Decoded ${decoded}/${totalFrames}`, 'No frames decoded');
+    assert(dropped < totalFrames * 0.5, `Drop rate: ${(dropped / totalFrames * 100).toFixed(0)}%`, 'Too many drops');
+  } catch (err) {
+    log(`FAIL: Playback error: ${err.message}`, 'fail');
+  }
+
+  // ═══ TEST 7: Pause — NO DEADLOCK (worker architecture) ═══
+  log('--- Test 7: Pause (No Deadlock) ---', 'info');
+  setProgress('Testing pause...');
+  try {
+    bridge.setPlaybackActive(true, 0);
+    await new Promise(r => setTimeout(r, 300));
+    for (let i = 0; i < 5; i++) await bridge.getFrameAt(i / probeResult.fps);
+
+    const t0 = performance.now();
+    bridge.setPlaybackActive(false);
+
+    let alive = false;
+    const timeout = new Promise(r => setTimeout(() => { alive = true; r(); }, 100));
+    const frame = await Promise.race([
+      bridge.getFrameAt(2 / probeResult.fps),
+      new Promise(r => setTimeout(() => r('TIMEOUT'), 3000))
+    ]);
+    await timeout;
+    const pauseMs = performance.now() - t0;
+
+    assert(alive, `Event loop alive after pause (${pauseMs.toFixed(0)}ms)`, 'DEADLOCK!');
+    assert(frame !== 'TIMEOUT', 'getFrameAt resolved', 'Timed out');
+
+    // Second cycle
+    bridge.setPlaybackActive(true, 1.0);
+    await new Promise(r => setTimeout(r, 200));
+    bridge.setPlaybackActive(false);
+    await new Promise(r => setTimeout(r, 200));
+    const f2 = await Promise.race([
+      bridge.getFrameAt(1.0),
+      new Promise(r => setTimeout(() => r('TIMEOUT'), 2000))
+    ]);
+    assert(f2 !== 'TIMEOUT', 'Second play/pause: no freeze', 'Freeze on second cycle');
+  } catch (err) {
+    log(`FAIL: Pause test error: ${err.message}`, 'fail');
+  }
+
+  // ═══ TEST 8: EOS + scrub back (worker handles gracefully) ═══
+  log('--- Test 8: EOS + Recovery ---', 'info');
+  setProgress('Testing end-of-stream...');
+  try {
+    const endSec = probeResult.durationMs / 1000;
+    const nearEnd = Math.max(0, endSec - 0.2);
+
+    bridge.setPlaybackActive(true, nearEnd);
+    await new Promise(r => setTimeout(r, 2000));
+
+    const t0 = performance.now();
+    bridge.setPlaybackActive(false);
+
+    let alive = false;
+    setTimeout(() => { alive = true; }, 200);
+    const eosFrame = await Promise.race([
+      bridge.getFrameAt(nearEnd),
+      new Promise(r => setTimeout(() => r('TIMEOUT'), 5000))
+    ]);
+    await new Promise(r => setTimeout(r, 300));
+    const eosMs = performance.now() - t0;
+
+    assert(alive, `Event loop alive at EOS (${eosMs.toFixed(0)}ms)`, 'DEADLOCK at EOS!');
+    assert(eosFrame !== 'TIMEOUT', 'getFrameAt at EOS resolved', 'Timeout at EOS');
+
+    // Scrub BACK into the clip — must work (no dead flag)
+    const backFrame = await Promise.race([
+      bridge.getFrameAt(1.0),
+      new Promise(r => setTimeout(() => r('TIMEOUT'), 5000))
+    ]);
+    assert(backFrame !== 'TIMEOUT', 'Scrub back after EOS works', 'Scrub back timed out');
+    if (backFrame && backFrame !== 'TIMEOUT') {
+      ctx.drawImage(backFrame, 0, 0, canvas.width, canvas.height);
+      assert(true, 'Frame drawn after EOS recovery', '');
+    }
+  } catch (err) {
+    log(`FAIL: EOS test error: ${err.message}`, 'fail');
+  }
+
+  // ═══ TEST 9: drawFit scale-to-fit ═══
+  log('--- Test 9: drawFit ---', 'info');
+  try {
+    const frame = await bridge.getFrameAt(0.5);
+    if (frame) {
+      const tc = new OffscreenCanvas(320, 180);
+      const tctx = tc.getContext('2d');
+      tctx.fillStyle = '#f00';
+      tctx.fillRect(0, 0, 320, 180);
+      const { drawFit } = await import('../src/lib/editor/playback/compositorHelpers.js');
+      drawFit(tctx, frame, 320, 180);
+      const px = tctx.getImageData(160, 90, 1, 1).data;
+      assert(!(px[0] > 200 && px[1] < 50 && px[2] < 50), 'drawFit scales correctly', 'Center pixel is still red');
+    }
+  } catch (err) {
+    log(`FAIL: drawFit test error: ${err.message}`, 'fail');
+  }
+
+  // ═══ TEST 10: Memory stability ═══
+  log('--- Test 10: Memory ---', 'info');
+  setProgress('Memory test...');
+  try {
+    const requests = [];
+    const count = Math.min(50, Math.floor(probeResult.durationMs / 1000 * probeResult.fps));
+    for (let i = 0; i < count; i++) requests.push(bridge.getFrameAt(i / probeResult.fps));
+    const frames = await Promise.all(requests);
+    const nonNull = frames.filter(f => f !== null).length;
+    assert(nonNull > 0, `${nonNull}/${count} frames (no OOM)`, 'All null');
+    if (performance.memory) {
+      const mb = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(0);
+      log(`JS heap: ${mb} MB`, 'info');
+      assert(performance.memory.usedJSHeapSize < 2 * 1024 * 1024 * 1024, `Heap under 2GB (${mb}MB)`, `Heap too large: ${mb}MB`);
+    }
+  } catch (err) {
+    log(`FAIL: Memory test error: ${err.message}`, 'fail');
+  }
+
+  // ═══ Summary ═══
+  setProgress('Done.');
+  const total = passed + failed;
+  summary.className = failed > 0 ? 'fail' : 'pass';
+  summary.textContent = `${passed}/${total} tests passed, ${failed} failed, ${warnings} warnings`;
+  log(`\n=== SUMMARY: ${passed} passed, ${failed} failed, ${warnings} warnings ===`, failed > 0 ? 'fail' : 'pass');
+});
+</script>
+</body>
+</html>

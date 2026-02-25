@@ -1,0 +1,395 @@
+/* ============================================
+   NLE Editor — Docking Panel System
+   Recursive split-tree layout with tabs
+   ============================================ */
+
+/* ── Dock Root ── */
+.nle-dock-root {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ── Split Containers ── */
+.nle-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.nle-split-h {
+  flex-direction: row;
+}
+
+.nle-split-v {
+  flex-direction: column;
+}
+
+.nle-split-child {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Resizers ── */
+.nle-dock-resizer-h,
+.nle-dock-resizer-v {
+  flex-shrink: 0;
+  background: var(--nle-bg-darkest);
+  z-index: var(--z-embedded-low);
+  transition: background 0.12s;
+}
+
+.nle-dock-resizer-h {
+  width: 3px;
+  cursor: col-resize;
+}
+
+.nle-dock-resizer-v {
+  height: 3px;
+  cursor: row-resize;
+}
+
+.nle-dock-resizer-h:hover,
+.nle-dock-resizer-v:hover {
+  background: var(--nle-accent);
+}
+
+/* ── Tab Groups ── */
+.nle-tab-group {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+  background: var(--nle-bg-panel);
+  border: 2px solid transparent;
+  transition: border-color 0.12s;
+}
+
+.nle-group-active {
+  border-color: var(--nle-accent);
+}
+
+/* ── Tab Bar ── */
+.nle-tab-bar {
+  display: flex;
+  align-items: stretch;
+  height: 26px;
+  min-height: 26px;
+  background: var(--nle-bg-toolbar);
+  border-bottom: 1px solid var(--nle-bg-darkest);
+  overflow-x: auto;
+  overflow-y: hidden;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* ── Tabs ── */
+.nle-dock-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  cursor: grab;
+  border-bottom: 2px solid transparent;
+  color: var(--nle-text-subtle);
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s, background 0.08s;
+  flex-shrink: 0;
+}
+
+.nle-dock-tab:hover {
+  color: #b0b0b0;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.nle-dock-tab.active {
+  color: var(--nle-text);
+  border-bottom-color: var(--nle-accent);
+}
+
+.nle-dock-tab-dragging {
+  opacity: 0.4;
+}
+
+.nle-dock-tab-label {
+  pointer-events: none;
+}
+
+/* Close button on tabs */
+.nle-dock-tab-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--nle-border-medium);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+
+.nle-dock-tab:hover .nle-dock-tab-close {
+  display: flex;
+}
+
+.nle-dock-tab-close:hover {
+  color: var(--nle-text);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Pop-out button on tabs */
+.nle-dock-tab-popout {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--nle-border-medium);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+
+.nle-dock-tab:hover .nle-dock-tab-popout {
+  display: flex;
+}
+
+.nle-dock-tab-popout:hover {
+  color: var(--nle-text);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Tab Content Area ── */
+.nle-tab-content-area {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+}
+
+.nle-tab-content-area > * {
+  width: 100%;
+  height: 100%;
+}
+
+
+/* ── Drop Indicators ── */
+.nle-drop-indicator {
+  position: absolute;
+  background: rgba(74, 144, 217, 0.12);
+  border: 2px dashed var(--nle-accent);
+  z-index: var(--z-overlay);
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+.nle-drop-indicator-left {
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+}
+
+.nle-drop-indicator-right {
+  top: 0;
+  right: 0;
+  width: 50%;
+  height: 100%;
+}
+
+.nle-drop-indicator-top {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+}
+
+.nle-drop-indicator-bottom {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+}
+
+.nle-drop-indicator-tab {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 26px;
+  border-radius: 0;
+}
+
+/* ── Drag Ghost ── */
+.nle-tab-drag-ghost {
+  position: fixed;
+  z-index: var(--z-modal);
+  padding: 4px 16px;
+  background: var(--nle-accent);
+  color: var(--nle-white);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+
+/* ── Floating Panels ── */
+.nle-floating-panel {
+  position: fixed;
+  z-index: var(--z-floating);
+  background: var(--nle-bg-panel);
+  border: 1px solid var(--nle-bg-medium);
+  border-radius: 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  min-height: 150px;
+  overflow: hidden;
+}
+
+.nle-floating-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 10px;
+  background: var(--nle-bg-toolbar);
+  border-bottom: 1px solid var(--nle-bg-darkest);
+  cursor: move;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--nle-text);
+  user-select: none;
+}
+
+.nle-floating-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--nle-border-medium);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 2px;
+  transition: color 0.1s, background 0.1s;
+}
+
+.nle-floating-close:hover {
+  color: var(--nle-text);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nle-floating-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.nle-floating-content > * {
+  width: 100%;
+  height: 100%;
+}
+
+.nle-floating-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+  background: transparent;
+}
+
+.nle-floating-resize-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--nle-border-medium);
+  border-bottom: 2px solid var(--nle-border-medium);
+}
+
+/* ── Prevent event stealing during drag ── */
+body.nle-dock-dragging iframe,
+body.nle-dock-dragging canvas,
+body.nle-dock-dragging video {
+  pointer-events: none;
+}
+
+body.nle-dock-dragging {
+  user-select: none;
+}
+
+/* ── Pop-Out Window ── */
+.nle-popout-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.nle-popout-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  background: var(--nle-bg-toolbar, #2a2a2a);
+  border-bottom: 1px solid var(--nle-bg-darkest, #111);
+  color: var(--nle-text, #e0e0e0);
+  font-size: 12px;
+  font-weight: 500;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.nle-popout-dock-btn {
+  padding: 3px 10px;
+  background: var(--nle-bg-medium, #3a3a3a);
+  border: 1px solid var(--nle-border-medium, #555);
+  border-radius: 3px;
+  color: var(--nle-text, #e0e0e0);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.nle-popout-dock-btn:hover {
+  background: var(--nle-accent, #4a90d9);
+  border-color: var(--nle-accent, #4a90d9);
+  color: #fff;
+}
+
+.nle-popout-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.nle-popout-content > * {
+  width: 100%;
+  height: 100%;
+}

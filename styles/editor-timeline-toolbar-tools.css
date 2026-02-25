@@ -1,0 +1,6 @@
+/* editor-timeline-toolbar-tools.css
+   The duplicate tool palette, timecode, and zoom controls added to the
+   horizontal timeline toolbar were removed in the code excellence pass.
+   The vertical .nle-toolbar (with .nle-tool-btn) is the canonical tool picker.
+   This file is intentionally empty.
+*/

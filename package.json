@@ -1,0 +1,37 @@
+{
+  "name": "nle-video-editor",
+  "version": "1.0.0",
+  "description": "Browser-based non-linear video editor with multi-track timeline",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src tests",
+    "lint:fix": "eslint src tests --fix",
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\""
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-jsdoc": "^62.5.4",
+    "prettier": "^3.8.1",
+    "vite": "^5.0.8",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
+    "@mediapipe/tasks-vision": "^0.10.32",
+    "@timephy/rnnoise-wasm": "^1.0.0",
+    "h264-interp-utils": "^1.1.1",
+    "mediabunny": "^1.32.2",
+    "mp4box": "^2.3.0"
+  }
+}

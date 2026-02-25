@@ -1,0 +1,334 @@
+/* ============================================
+   NLE Editor — Premiere Pro dark theme
+   Overrides glassmorphism on the editor screen
+   ============================================ */
+
+/* ── Resizer handles ── */
+.nle-resizer {
+  background: var(--nle-bg-dark);
+  z-index: var(--z-embedded-mid);
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+
+.nle-resizer:hover {
+  background: var(--nle-accent);
+}
+
+.nle-resizer-horizontal {
+  height: 3px;
+  cursor: row-resize;
+  width: 100%;
+}
+
+.nle-resizer-vertical {
+  width: 3px;
+  cursor: col-resize;
+  height: 100%;
+}
+
+/* ── Menu trigger (dark theme) ── */
+.nle-menu-trigger {
+  padding: 0 10px;
+  background: none;
+  border: none;
+  color: var(--nle-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.08s;
+  line-height: 24px;
+  height: 24px;
+}
+
+.nle-menu-trigger:hover {
+  background: var(--nle-bg-medium);
+}
+
+/* ── Focus styles for accessibility ── */
+.nle-tool-btn:focus-visible,
+.nle-transport button:focus-visible,
+.nle-back-btn:focus-visible,
+.nle-import-btn:focus-visible {
+  outline: 2px solid var(--nle-accent);
+  outline-offset: 1px;
+}
+
+/* ── Selection & cursor overrides per tool ── */
+.nle-tool-razor .nle-track-lane {
+  cursor: crosshair;
+}
+
+.nle-tool-hand .nle-timeline-body {
+  cursor: grab;
+}
+
+.nle-tool-hand .nle-timeline-body:active {
+  cursor: grabbing;
+}
+
+.nle-tool-zoom .nle-timeline-body {
+  cursor: zoom-in;
+}
+
+/* ── Clip type styles ── */
+.nle-clip.video {
+  background: linear-gradient(180deg, #3a5f8a 0%, #2d4a6e 100%);
+  border: 1px solid rgba(74, 144, 217, 0.3);
+}
+
+.nle-clip.video:hover {
+  background: linear-gradient(180deg, #426a99 0%, #34537a 100%);
+}
+
+.nle-clip.video.selected {
+  border-color: var(--nle-accent);
+  box-shadow: 0 0 0 1px rgba(74, 144, 217, 0.4);
+}
+
+.nle-clip.audio {
+  background: linear-gradient(180deg, #2e5e4a 0%, #234a3a 100%);
+  border: 1px solid rgba(86, 182, 194, 0.3);
+}
+
+.nle-clip.audio:hover {
+  background: linear-gradient(180deg, #356a54 0%, #2a5442 100%);
+}
+
+.nle-clip.audio.selected {
+  border-color: var(--nle-teal);
+  box-shadow: 0 0 0 1px rgba(86, 182, 194, 0.4);
+}
+
+/* ── Clip disabled state ── */
+.nle-clip.disabled {
+  opacity: 0.35;
+  filter: grayscale(0.5);
+}
+
+/* ── Track type indicators ── */
+.nle-track-row[data-track-type="video"] .nle-track-header {
+  border-left: 3px solid var(--nle-accent);
+}
+
+.nle-track-row[data-track-type="audio"] .nle-track-header {
+  border-left: 3px solid var(--nle-teal);
+}
+
+/* ── Marker rendering ── */
+.nle-marker {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  z-index: var(--z-overlay);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.nle-marker-flag {
+  position: absolute;
+  top: -3px;
+  left: -4px;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  border-radius: 1px;
+  transition: transform 0.1s;
+}
+
+.nle-marker:hover .nle-marker-flag {
+  transform: rotate(45deg) scale(1.25);
+}
+
+/* Marker type colors */
+.nle-marker.type-default { background: var(--nle-yellow); }
+.nle-marker.type-default .nle-marker-flag { background: var(--nle-yellow); }
+
+.nle-marker.type-chapter { background: var(--nle-accent); }
+.nle-marker.type-chapter .nle-marker-flag { background: var(--nle-accent); }
+
+.nle-marker.type-comment { background: var(--nle-teal); }
+.nle-marker.type-comment .nle-marker-flag { background: var(--nle-teal); }
+
+.nle-marker.type-todo { background: var(--nle-red); }
+.nle-marker.type-todo .nle-marker-flag { background: var(--nle-red); }
+
+/* All marker type-variants defined above */
+.nle-marker.type-default .nle-marker-flag { background: var(--nle-yellow); }
+
+/* ── In/Out point indicators ── */
+.nle-in-point,
+.nle-out-point {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+}
+
+.nle-in-point {
+  background: var(--nle-green);
+}
+
+.nle-out-point {
+  background: var(--nle-red-bright);
+}
+
+.nle-in-out-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(74, 144, 217, 0.08);
+  z-index: var(--z-embedded);
+  pointer-events: none;
+}
+
+/* ── Transition overlap indicator ── */
+.nle-transition-overlap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 3px,
+    rgba(74, 144, 217, 0.15) 3px,
+    rgba(74, 144, 217, 0.15) 6px
+  );
+  border-left: 1px dashed rgba(74, 144, 217, 0.4);
+  border-right: 1px dashed rgba(74, 144, 217, 0.4);
+  z-index: var(--z-overlay);
+  pointer-events: none;
+}
+
+/* ── Snap indicator line ── */
+.nle-snap-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--nle-yellow);
+  z-index: var(--z-sticky);
+  pointer-events: none;
+  box-shadow: 0 0 4px rgba(229, 192, 123, 0.4);
+}
+
+/* ── Waveform overlay on audio clips ── */
+.nle-clip-waveform {
+  position: absolute;
+  inset: 0;
+  opacity: 0.4;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.nle-clip-waveform canvas {
+  width: 100%;
+  height: 100%;
+  filter: hue-rotate(90deg) saturate(0.6);
+}
+
+/* ── Resizer grid placement ── */
+.nle-resizer-horizontal[data-resize="mid-bottom"] {
+  grid-row: 4;
+  grid-column: 1;
+}
+
+/* Scrollbar styling is in editor-panels.css */
+
+/* ── Loading states ── */
+.nle-loading-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--nle-bg-dark);
+  border-top-color: var(--nle-accent);
+  border-radius: 50%;
+  animation: nle-spin 0.7s linear infinite;
+}
+
+@keyframes nle-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Notification toast inside editor ── */
+.nle-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: var(--nle-bg-dark);
+  border: 1px solid var(--nle-bg-darkest);
+  border-radius: 4px;
+  color: var(--nle-text);
+  font-size: 12px;
+  z-index: var(--z-popover);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  animation: nle-toast-in 0.25s ease-out;
+}
+
+.nle-toast.nle-toast-out {
+  animation: nle-toast-out 0.2s ease-in forwards;
+}
+
+@keyframes nle-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes nle-toast-out {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(10px); }
+}
+
+.nle-toast-success { border-left: 3px solid var(--nle-green); }
+.nle-toast-error { border-left: 3px solid var(--nle-red-bright); }
+.nle-toast-info { border-left: 3px solid var(--nle-accent); }
+
+/* ── Context menu ── */
+.nle-context-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  min-width: 180px;
+  background: var(--nle-bg-dark);
+  border: 1px solid var(--nle-bg-darkest);
+  border-radius: 4px;
+  padding: 4px 0;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  font-size: 12px;
+  color: var(--nle-text);
+}
+
+.nle-context-item {
+  padding: 5px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.08s;
+  border-left: 2px solid transparent;
+}
+
+.nle-context-item:hover {
+  background: var(--nle-accent);
+  border-left-color: var(--nle-accent);
+  color: var(--nle-white);
+}
+
+.nle-context-item.disabled {
+  color: var(--nle-border-medium);
+  cursor: default;
+}
+
+.nle-context-item.disabled:hover {
+  background: transparent;
+  border-left-color: transparent;
+  color: var(--nle-border-medium);
+}
+
+.nle-context-separator {
+  height: 1px;
+  background: var(--nle-bg-dark);
+  margin: 4px 8px;
+}

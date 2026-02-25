@@ -1,0 +1,227 @@
+/* ── Roto Brush Overlay ── */
+.nle-roto-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: var(--z-overlay-roto); /* Above mask overlay */
+  pointer-events: none;
+}
+
+/* ── Roto Properties Section ── */
+.nle-roto-section {
+  border-left: 2px solid var(--nle-roto-primary);
+}
+
+.nle-roto-section .nle-props-section-header {
+  color: var(--nle-roto-accent);
+}
+
+/* ── View Mode Buttons ── */
+.nle-roto-view-bar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+}
+
+.nle-roto-view-btn {
+  flex: 1;
+  background: var(--nle-bg-dark);
+  color: var(--nle-text-muted);
+  border: 1px solid var(--nle-border-dark);
+  padding: 3px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+.nle-roto-view-btn:hover {
+  background: var(--nle-bg-medium);
+  color: var(--nle-text-secondary);
+}
+.nle-roto-view-btn.active {
+  background: rgba(0, 136, 204, 0.2);
+  border-color: var(--nle-roto-primary);
+  color: var(--nle-roto-accent);
+}
+
+/* ── Tool Buttons ── */
+.nle-roto-tool-bar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 8px;
+}
+
+.nle-roto-tool-btn {
+  flex: 1;
+  background: var(--nle-bg-dark);
+  color: var(--nle-text-label);
+  border: 1px solid var(--nle-border-dark);
+  padding: 4px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+.nle-roto-tool-btn:hover {
+  background: var(--nle-border-dark);
+  color: var(--nle-text-light);
+}
+.nle-roto-tool-btn.active {
+  background: rgba(0, 136, 204, 0.2);
+  border-color: var(--nle-roto-primary);
+  color: var(--nle-roto-accent);
+}
+.nle-roto-tool-btn.fg-tool.active {
+  background: rgba(0, 160, 0, 0.15);
+  border-color: #0a0;
+  color: var(--nle-roto-fg);
+}
+.nle-roto-tool-btn.bg-tool.active {
+  background: rgba(160, 0, 0, 0.15);
+  border-color: #a00;
+  color: var(--nle-roto-bg);
+}
+
+/* ── Propagation ── */
+.nle-roto-track-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px;
+  align-items: center;
+}
+
+.nle-roto-track-btn {
+  flex: 1;
+  background: var(--nle-bg-dark);
+  color: var(--nle-text-label);
+  border: 1px solid var(--nle-border-dark);
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  transition: background 0.15s, color 0.15s;
+}
+.nle-roto-track-btn:hover {
+  background: var(--nle-border-dark);
+  color: var(--nle-text-light);
+}
+
+.nle-roto-step-btn {
+  flex: 0 0 auto;
+  min-width: 24px;
+  padding: 3px 4px;
+  font-size: 9px;
+  letter-spacing: -0.5px;
+}
+
+.nle-roto-track-pause {
+  flex: 0 0 auto;
+  min-width: 24px;
+  padding: 3px 4px;
+  font-size: 12px;
+  background: rgba(0, 102, 0, 0.15);
+  border-color: rgba(0, 102, 0, 0.4);
+  color: #8c8;
+}
+.nle-roto-track-pause:hover {
+  background: rgba(0, 102, 0, 0.25);
+  color: #afa;
+}
+.nle-roto-track-pause.paused {
+  background: rgba(102, 102, 0, 0.2);
+  border-color: rgba(102, 102, 0, 0.4);
+  color: #cc6;
+}
+.nle-roto-track-pause.paused:hover {
+  background: rgba(102, 102, 0, 0.3);
+  color: #ee8;
+}
+
+.nle-roto-track-cancel {
+  background: rgba(204, 51, 51, 0.2);
+  border-color: rgba(204, 51, 51, 0.5);
+  color: #e88;
+}
+.nle-roto-track-cancel:hover {
+  background: rgba(204, 51, 51, 0.3);
+  color: #faa;
+}
+
+.nle-roto-track-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--nle-bg-dark);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.nle-roto-track-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--nle-roto-primary);
+  border-radius: 2px;
+  transition: width 0.15s ease-out;
+}
+
+/* ── Freeze Button ── */
+.nle-roto-freeze-btn {
+  width: 100%;
+  background: var(--nle-bg-dark);
+  color: var(--nle-text-label);
+  border: 1px solid var(--nle-border-dark);
+  padding: 4px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.15s, color 0.15s;
+}
+.nle-roto-freeze-btn:hover {
+  background: var(--nle-border-dark);
+  color: var(--nle-text-light);
+}
+.nle-roto-freeze-btn.frozen {
+  background: rgba(0, 136, 204, 0.15);
+  border-color: var(--nle-roto-primary);
+  color: var(--nle-roto-accent);
+}
+
+/* ── Stroke Info ── */
+.nle-roto-stroke-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: var(--nle-text-muted);
+}
+
+.nle-roto-clear-btn {
+  background: transparent;
+  border: 1px solid var(--nle-border-dark);
+  color: var(--nle-text-muted);
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+}
+.nle-roto-clear-btn:hover {
+  background: rgba(204, 51, 51, 0.2);
+  border-color: rgba(204, 51, 51, 0.5);
+  color: #e88;
+}
+
+/* ── Subsection Headers ── */
+.nle-roto-sub-header {
+  font-size: 10px;
+  color: var(--nle-text-dim);
+  padding: 6px 8px 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-top: 1px solid var(--nle-border-subtle);
+}

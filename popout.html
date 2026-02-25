@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; overflow: hidden; height: 100%; background: #1a1a1a; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; }
+    #popout-root { display: flex; flex-direction: column; width: 100vw; height: 100vh; overflow: hidden; }
+    #popout-titlebar { display: flex; align-items: center; justify-content: space-between; height: 32px; min-height: 32px; padding: 0 12px; background: #2a2a2a; border-bottom: 1px solid #111; color: #e0e0e0; font-size: 12px; font-weight: 500; user-select: none; flex-shrink: 0; }
+    #popout-dock-btn { padding: 3px 10px; background: #3a3a3a; border: 1px solid #555; border-radius: 3px; color: #e0e0e0; font-size: 11px; cursor: pointer; }
+    #popout-dock-btn:hover { background: #4a90d9; border-color: #4a90d9; color: #fff; }
+    #popout-content { flex: 1; overflow: hidden; min-height: 0; }
+    #popout-content > * { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="popout-root">
+    <div id="popout-titlebar">
+      <span id="popout-title">Panel</span>
+      <button id="popout-dock-btn">Dock Back</button>
+    </div>
+    <div id="popout-content"></div>
+  </div>
+  <script>
+    // Signal readiness to opener — opener will inject content via adoptNode
+    window._popoutReady = true;
+  </script>
+</body>
+</html>

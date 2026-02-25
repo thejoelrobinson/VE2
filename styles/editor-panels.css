@@ -1,0 +1,1355 @@
+/* ============================================
+   NLE Editor — Panels: Source Monitor, Effects,
+   Properties, and panel chrome
+   Premiere Pro-inspired styling
+   ============================================ */
+
+/* ── Performance: Containment ── */
+[data-panel] { contain: layout style; }
+
+/* ── Source Monitor ── */
+.nle-source-monitor {
+  display: flex;
+  flex-direction: column;
+  background: var(--nle-bg-panel);
+  overflow: hidden;
+}
+
+.nle-source-preview {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nle-black);
+  overflow: hidden;
+  position: relative;
+}
+
+.nle-source-video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.nle-source-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 8px;
+  background: var(--nle-bg-toolbar);
+  border-top: 1px solid var(--nle-bg-darkest);
+}
+
+.nle-source-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  color: var(--nle-text-disabled);
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.nle-source-controls button:hover {
+
+.nle-source-controls button:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--nle-text);
+}
+
+.nle-source-controls button:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.nle-source-marks {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--nle-text-dim);
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Effects Panel ── */
+.nle-effects-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--nle-bg-panel);
+  border-right: 1px solid var(--nle-bg-darkest);
+  overflow: hidden;
+}
+
+.nle-effects-search {
+  width: calc(100% - 12px);
+  margin: 6px;
+  padding: 0 8px 0 28px;
+  height: 28px;
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 4px;
+  color: var(--nle-text);
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.12s;
+}
+
+.nle-effects-search:focus {
+  border-color: var(--nle-accent);
+}
+
+.nle-effects-search:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+.nle-effects-search::placeholder {
+  color: var(--nle-border-medium);
+}
+
+.nle-effects-filters {
+  display: flex;
+  gap: 3px;
+  padding: 0 6px 6px;
+  flex-wrap: wrap;
+}
+
+.nle-effects-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 10px;
+  color: var(--nle-text-subtle);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  transition: all 0.1s;
+}
+
+.nle-effects-filter-btn:hover {
+  color: var(--nle-text-label);
+  border-color: var(--nle-border-medium);
+}
+
+.nle-effects-filter-btn.active {
+  background: var(--nle-accent);
+  border-color: var(--nle-accent);
+  color: var(--nle-white);
+}
+
+.nle-effects-filter-btn:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+.nle-effects-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.nle-effects-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--nle-border-medium);
+  font-size: 11px;
+}
+
+.nle-effects-group {
+  margin-bottom: 1px;
+}
+
+.nle-effects-group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--nle-text-disabled);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--nle-bg-dark);
+  cursor: pointer;
+  user-select: none;
+}
+
+.nle-effects-group-header::before {
+  content: '\25B6';
+  font-size: 7px;
+  color: var(--nle-text-dim);
+  transition: transform 0.12s;
+}
+
+.nle-effects-group-header.expanded::before {
+  transform: rotate(90deg);
+}
+
+.nle-effects-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 10px;
+  cursor: grab;
+  border-left: 2px solid transparent;
+  transition: background 0.08s, border-color 0.08s;
+}
+
+.nle-effects-item:hover {
+  background: var(--nle-bg-menubar);
+  border-left-color: var(--nle-accent);
+}
+
+.nle-effects-item:active {
+  cursor: grabbing;
+}
+
+.nle-effects-item-name {
+  font-size: 11px;
+  color: var(--nle-text);
+}
+
+.nle-effects-item-type {
+  font-size: 9px;
+  color: var(--nle-border-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ── Properties Panel ── */
+.nle-properties-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--nle-bg-panel);
+  overflow: hidden;
+}
+
+/* ── Effect Controls Panel ── */
+.nle-effect-controls-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--nle-bg-panel);
+  overflow: hidden;
+}
+
+.nle-ec-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.nle-properties-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.nle-props-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--nle-border-medium);
+  font-size: 11px;
+}
+
+.nle-props-section {
+  margin: 2px;
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.nle-props-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--nle-bg-toolbar);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--nle-text-light);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.nle-props-section-header:hover {
+  background: var(--nle-bg-medium);
+}
+
+.nle-props-section-header::before {
+  content: '\25B6';
+  font-size: 7px;
+  color: var(--nle-text-dim);
+  transition: transform 0.12s;
+}
+
+.nle-props-section-header.expanded::before {
+  transform: rotate(90deg);
+}
+
+.nle-props-section-header span {
+  flex: 1;
+}
+
+.nle-prop-toggle {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--nle-accent);
+}
+
+.nle-prop-remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--nle-border-medium);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px;
+  border-radius: 2px;
+  transition: color 0.1s, background 0.1s;
+}
+
+.nle-prop-remove-btn:hover {
+  color: var(--nle-red);
+  background: rgba(224, 108, 117, 0.1);
+}
+
+.nle-prop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+}
+
+.nle-prop-label {
+  font-size: 10px;
+  color: var(--nle-text-muted);
+  min-width: 65px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.nle-prop-slider {
+  flex: 1;
+  height: 2px;
+  accent-color: var(--nle-accent);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--nle-bg-dark);
+  border-radius: 1px;
+  outline: none;
+}
+
+.nle-prop-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--nle-accent);
+  cursor: pointer;
+  border: none;
+}
+
+.nle-prop-slider::-webkit-slider-thumb:hover {
+  background: var(--nle-accent-hover);
+}
+
+.nle-prop-value {
+  font-size: 10px;
+  color: var(--nle-text-disabled);
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.nle-prop-input {
+  flex: 1;
+  padding: 2px 6px;
+  height: 22px;
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 2px;
+  color: var(--nle-text);
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.12s;
+}
+
+.nle-prop-input:focus {
+
+.nle-prop-input:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  border-color: var(--nle-accent);
+}
+
+.nle-prop-color {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 2px;
+  cursor: pointer;
+  background: none;
+  flex-shrink: 0;
+}
+
+.nle-prop-color:hover {
+
+.nle-prop-color:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  border-color: var(--nle-border-medium);
+}
+
+.nle-keyframe-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: none;
+  border: none;
+  color: var(--nle-border-medium);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.1s;
+  flex-shrink: 0;
+}
+
+/* Diamond shape via rotated inner square */
+.nle-keyframe-btn::before {
+  content: '';
+  display: block;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: background 0.1s;
+}
+
+.nle-keyframe-btn:hover {
+  color: var(--nle-yellow);
+}
+
+.nle-keyframe-btn.active {
+  color: var(--nle-yellow);
+}
+
+.nle-keyframe-btn.active::before {
+  background: var(--nle-yellow);
+}
+
+.nle-keyframe-btn.at-frame {
+  color: var(--nle-accent);
+}
+
+.nle-keyframe-btn.at-frame::before {
+  background: var(--nle-accent);
+}
+
+/* ── Effect Controls Split Panel ── */
+
+.nle-ec-split {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.nle-ec-left {
+  width: 50%;
+  min-width: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.nle-ec-divider {
+  width: 4px;
+  background: var(--nle-bg-darkest);
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.1s;
+}
+
+.nle-ec-divider:hover,
+.nle-ec-divider.dragging {
+  background: var(--nle-accent);
+}
+
+.nle-ec-right {
+  flex: 1;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--nle-bg-input);
+}
+
+.nle-ec-clip-bar {
+  height: 24px;
+  background: var(--nle-bg-toolbar);
+  border-bottom: 1px solid var(--nle-border-subtle);
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--nle-text-light);
+  flex-shrink: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.nle-ec-clip-bar .nle-ec-clip-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.nle-ec-ruler-wrap {
+  height: 20px;
+  background: var(--nle-bg-input);
+  border-bottom: 1px solid var(--nle-border-subtle);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.nle-ec-ruler {
+  display: block;
+  width: 100%;
+  height: 20px;
+  cursor: pointer;
+}
+
+.nle-ec-canvas-wrap {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+.nle-ec-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.nle-ec-zoom-wrap {
+  height: 24px;
+  background: var(--nle-bg-panel);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-top: 1px solid var(--nle-border-subtle);
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.nle-ec-zoom-label {
+  font-size: 9px;
+  color: var(--nle-text-dim);
+  flex-shrink: 0;
+}
+
+.nle-ec-zoom {
+  flex: 1;
+  height: 2px;
+  accent-color: var(--nle-accent);
+  cursor: pointer;
+}
+
+/* ── Legacy marker classes (kept for backwards compat) ── */
+
+.nle-props-section--keyframeable {
+  /* No extra styling needed, just a marker class */
+}
+
+/* ── Stopwatch Toggle ── */
+
+.nle-kf-stopwatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--nle-border-medium);
+  cursor: pointer;
+  font-size: 11px;
+  flex-shrink: 0;
+  transition: color 0.1s;
+}
+
+.nle-kf-stopwatch:hover {
+  color: var(--nle-accent);
+}
+
+.nle-kf-stopwatch.active {
+  color: var(--nle-accent);
+}
+
+/* ── Keyframe Navigation Arrows ── */
+
+.nle-kf-nav-prev,
+.nle-kf-nav-next {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--nle-border-medium);
+  cursor: pointer;
+  font-size: 7px;
+  flex-shrink: 0;
+  transition: color 0.1s;
+}
+
+.nle-kf-nav-prev:hover,
+.nle-kf-nav-next:hover {
+  color: var(--nle-text);
+}
+
+/* ── Keyframe Row Layout ── */
+
+.nle-prop-row--kf {
+  gap: 3px;
+}
+
+.nle-prop-row--kf .nle-prop-label {
+  min-width: 50px;
+}
+
+/* ── Number Input (for Position X/Y, Anchor X/Y) ── */
+
+.nle-prop-number-input {
+  width: 52px;
+  height: 20px;
+  padding: 0 4px;
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 2px;
+  color: var(--nle-text);
+  font-size: 10px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  box-sizing: border-box;
+  text-align: right;
+  transition: border-color 0.12s;
+  flex-shrink: 0;
+}
+
+.nle-prop-number-input:focus {
+
+.nle-prop-number-input:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  border-color: var(--nle-accent);
+}
+
+.nle-prop-number-input::-webkit-inner-spin-button,
+.nle-prop-number-input::-webkit-outer-spin-button {
+  opacity: 0;
+  width: 0;
+}
+
+/* ── Checkbox for Uniform Scale ── */
+
+.nle-prop-checkbox {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--nle-accent);
+  flex-shrink: 0;
+}
+
+/* ── X/Y Pair Row Group ── */
+
+.nle-prop-row-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+}
+
+.nle-prop-row-group .nle-prop-label {
+  min-width: 50px;
+}
+
+.nle-prop-xy-label {
+  font-size: 9px;
+  color: var(--nle-text-dim);
+  flex-shrink: 0;
+}
+
+/* ── Collapsible Section ── */
+
+.nle-props-section-body {
+  overflow: hidden;
+}
+
+.nle-props-section-body.collapsed {
+  display: none;
+}
+
+/* ── Reset Button (appears on hover) ── */
+
+.nle-prop-reset-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--nle-border-medium);
+  cursor: pointer;
+  font-size: 10px;
+  flex-shrink: 0;
+  transition: color 0.1s;
+}
+
+.nle-prop-row:hover .nle-prop-reset-btn,
+.nle-prop-row--kf:hover .nle-prop-reset-btn,
+.nle-prop-row-group:hover .nle-prop-reset-btn {
+  display: flex;
+}
+
+.nle-prop-reset-btn:hover {
+  color: var(--nle-accent);
+}
+
+/* ── Blue Value When Keyframed ── */
+
+.nle-prop-value.keyframed {
+  color: var(--nle-accent);
+}
+
+.nle-prop-number-input.keyframed {
+  color: var(--nle-accent);
+}
+
+/* ── Scrubby Slider / Hot Text ── */
+
+.nle-scrubby {
+  cursor: ew-resize;
+  user-select: none;
+  border-bottom: 1px dotted rgba(136, 136, 136, 0.4);
+  padding-bottom: 1px;
+  transition: color 0.1s, border-color 0.15s;
+}
+
+.nle-scrubby:hover {
+  border-bottom-color: var(--nle-accent);
+}
+
+.nle-prop-value.nle-scrubby:hover {
+  color: var(--nle-text-secondary);
+}
+
+.nle-prop-value.keyframed.nle-scrubby:hover {
+  color: var(--nle-accent-hover);
+}
+
+/* Number inputs: scrubby cursor only when not focused */
+input.nle-scrubby {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+input.nle-scrubby:not(:focus) {
+  cursor: ew-resize;
+}
+
+/* Lumetri value displays */
+.nle-lumetri-row-value.nle-scrubby:hover {
+  color: var(--nle-accent);
+}
+
+/* ── Angle Dial (rotation/angle parameters) ── */
+
+.nle-angle-dial {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.nle-angle-dial:hover {
+  box-shadow: 0 0 0 1px var(--nle-accent);
+}
+
+/* Inline edit input that replaces a span during text entry */
+.nle-scrubby-input {
+  height: 18px;
+  padding: 0 3px;
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-accent);
+  border-radius: 2px;
+  color: var(--nle-text);
+  font-size: 10px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* ── Checkbox Row ── */
+
+.nle-prop-row--checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px 0 36px;
+}
+
+.nle-prop-row--checkbox .nle-prop-label {
+  min-width: auto;
+}
+
+/* ── Audio Meters Panel ── */
+
+.nle-audio-meters-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--nle-bg-input);
+  overflow: hidden;
+}
+
+.nle-audio-meters-content {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  padding: 4px;
+  min-height: 0;
+}
+
+.nle-audio-meters-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Sequence Settings Panel ── */
+
+.nle-seq-settings-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--nle-bg-panel);
+  overflow: hidden;
+}
+
+.nle-seq-settings {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.nle-seq-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 4px;
+}
+
+.nle-seq-label {
+  font-size: 10px;
+  color: var(--nle-text-muted);
+  min-width: 70px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.nle-seq-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.nle-seq-select {
+  flex: 1;
+  height: 24px;
+  padding: 0 6px;
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 2px;
+  color: var(--nle-text);
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.12s;
+  min-width: 0;
+}
+
+.nle-seq-select:focus {
+
+.nle-seq-select:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  border-color: var(--nle-accent);
+}
+
+.nle-seq-custom-res {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nle-seq-num-input {
+  width: 60px;
+  height: 22px;
+  padding: 0 4px;
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 2px;
+  color: var(--nle-text);
+  font-size: 10px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  box-sizing: border-box;
+  text-align: right;
+  transition: border-color 0.12s;
+}
+
+.nle-seq-num-input:focus {
+
+.nle-seq-num-input:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+  border-color: var(--nle-accent);
+}
+
+.nle-seq-num-input::-webkit-inner-spin-button,
+.nle-seq-num-input::-webkit-outer-spin-button {
+  opacity: 0;
+  width: 0;
+}
+
+.nle-seq-x-label {
+  font-size: 10px;
+  color: var(--nle-text-dim);
+}
+
+.nle-seq-divider {
+  height: 1px;
+  background: var(--nle-bg-dark);
+  margin: 6px 0;
+}
+
+.nle-seq-progress-section {
+  padding: 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nle-seq-progress-header {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--nle-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nle-seq-progress-bar-wrap {
+  height: 6px;
+  background: var(--nle-bg-darkest);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.nle-seq-progress-bar {
+  height: 100%;
+  background: var(--nle-progress-bar);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  min-width: 0;
+}
+
+.nle-seq-progress-label {
+  font-size: 10px;
+  color: var(--nle-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.nle-seq-btn-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.nle-seq-btn {
+  height: 24px;
+  padding: 0 10px;
+  background: var(--nle-bg-toolbar);
+  border: 1px solid var(--nle-bg-medium);
+  border-radius: 3px;
+  color: var(--nle-text-light);
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.nle-seq-btn:hover {
+  background: var(--nle-bg-medium);
+  border-color: var(--nle-accent);
+  color: var(--nle-text);
+}
+
+.nle-seq-btn:active {
+  background: var(--nle-bg-medium);
+}
+
+.nle-seq-tuning-section {
+  padding: 8px 0 4px;
+}
+
+.nle-seq-tuning-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.nle-seq-slider {
+  flex: 1;
+  height: 4px;
+  accent-color: var(--nle-accent);
+  cursor: pointer;
+}
+
+.nle-seq-tuning-value {
+  min-width: 22px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--nle-text-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.nle-seq-checkbox {
+  accent-color: var(--nle-accent);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+/* ─── Scene Edit Detection Dialog ─── */
+.nle-sed-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+}
+
+.nle-sed-dialog {
+  background: var(--nle-bg-input);
+  border: 1px solid var(--nle-border-dark);
+  border-radius: 8px;
+  width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  color: var(--nle-text-secondary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+}
+
+.nle-sed-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--nle-border-dark);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nle-sed-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--nle-white);
+}
+
+.nle-sed-close-btn {
+  background: none;
+  border: none;
+  color: var(--nle-text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.nle-sed-close-btn:hover {
+  color: var(--nle-white);
+}
+
+.nle-sed-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.nle-sed-clip-info {
+  color: var(--nle-text-muted);
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+
+.nle-sed-section-label {
+  color: var(--nle-text-label);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  margin-top: 12px;
+}
+
+.nle-sed-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.nle-sed-option label {
+  cursor: pointer;
+  user-select: none;
+}
+
+.nle-sed-option input[type="checkbox"] {
+  accent-color: var(--nle-dialog-accent);
+  width: 14px;
+  height: 14px;
+}
+
+.nle-sed-sensitivity {
+  margin-top: 16px;
+}
+
+.nle-sed-sensitivity-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.nle-sed-sensitivity-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--nle-dialog-accent);
+  height: 4px;
+}
+
+.nle-sed-sensitivity-value {
+  color: var(--nle-text-label);
+  font-size: 12px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.nle-sed-sensitivity-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--nle-text-dim);
+  margin-top: 2px;
+}
+
+/* Progress section */
+.nle-sed-progress {
+  margin-top: 16px;
+  display: none;
+}
+
+.nle-sed-progress.active {
+  display: block;
+}
+
+.nle-sed-progress-bar-track {
+  height: 6px;
+  background: var(--nle-border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.nle-sed-progress-bar-fill {
+  height: 100%;
+  background: var(--nle-dialog-accent);
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.15s ease;
+}
+
+.nle-sed-progress-text {
+  font-size: 12px;
+  color: var(--nle-text-muted);
+}
+
+/* Results section */
+.nle-sed-results {
+  margin-top: 16px;
+  display: none;
+}
+
+.nle-sed-results.active {
+  display: block;
+}
+
+.nle-sed-results-summary {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--nle-white);
+}
+
+.nle-sed-results-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--nle-border-subtle);
+  border-radius: 4px;
+  background: var(--nle-bg-deep);
+}
+
+.nle-sed-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--nle-bg-dark);
+  font-size: 12px;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+}
+
+.nle-sed-result-item:last-child {
+  border-bottom: none;
+}
+
+.nle-sed-result-item:hover {
+  background: var(--nle-bg-track);
+}
+
+.nle-sed-result-num {
+  color: var(--nle-text-dim);
+  min-width: 30px;
+}
+
+.nle-sed-result-time {
+  color: var(--nle-text-secondary);
+  flex: 1;
+}
+
+.nle-sed-result-confidence {
+  color: var(--nle-text-muted);
+  font-size: 11px;
+}
+
+.nle-sed-no-results {
+  padding: 20px;
+  text-align: center;
+  color: var(--nle-text-dim);
+  font-style: italic;
+}
+
+/* Actions footer */
+.nle-sed-actions {
+  padding: 12px 20px;
+  border-top: 1px solid var(--nle-border-dark);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.nle-sed-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--nle-border-medium);
+  border-radius: 4px;
+  background: var(--nle-bg-dark);
+  color: var(--nle-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.nle-sed-btn:hover {
+  background: var(--nle-bg-medium);
+}
+
+.nle-sed-btn-primary {
+  background: var(--nle-dialog-accent);
+  border-color: var(--nle-dialog-accent);
+  color: var(--nle-white);
+}
+
+.nle-sed-btn-primary:hover {
+  background: #1883d4;
+}
+
+.nle-sed-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

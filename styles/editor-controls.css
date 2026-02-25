@@ -1,0 +1,371 @@
+/* ============================================
+   NLE Editor — Controls: Export Dialog, Menus
+   Premiere Pro-inspired styling
+   ============================================ */
+
+/* ── Export Dialog Overlay ── */
+.nle-export-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-popover);
+  backdrop-filter: blur(4px);
+}
+
+.nle-export-dialog {
+  background: var(--nle-bg-toolbar);
+  border: 1px solid var(--nle-bg-darkest);
+  border-radius: 6px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.nle-export-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--nle-bg-menubar);
+  border-bottom: 1px solid var(--nle-bg-darkest);
+}
+
+.nle-export-header h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nle-text);
+  letter-spacing: 0.2px;
+}
+
+.nle-export-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: var(--nle-text-dim);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.1s, background 0.1s;
+}
+
+.nle-export-close-btn:hover {
+  color: var(--nle-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.nle-export-body {
+  padding: 16px;
+  background: var(--nle-bg-toolbar);
+}
+
+.nle-export-section {
+  margin-bottom: 12px;
+}
+
+.nle-export-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--nle-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.nle-export-preset-select {
+  width: 100%;
+  padding: 6px 10px;
+  height: 30px;
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 4px;
+  color: var(--nle-text);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.12s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+.nle-export-preset-select:focus {
+  border-color: var(--nle-accent);
+}
+
+.nle-export-preset-select:focus-visible {
+  outline: var(--nle-focus-outline);
+  outline-offset: var(--nle-focus-outline-offset);
+}
+
+/* ── Export Encoding Controls ── */
+.nle-export-encoding-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.nle-export-encoding-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.nle-export-details {
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-bg-dark);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.nle-export-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 11px;
+}
+
+.nle-export-detail-row span:first-child {
+  color: var(--nle-text-subtle);
+}
+
+.nle-export-detail-row span:last-child {
+  color: var(--nle-text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Export Progress */
+.nle-export-progress {
+  margin-top: 12px;
+}
+
+.nle-export-progress-bar {
+  height: 4px;
+  background: var(--nle-bg-darkest);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.nle-export-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--nle-accent), var(--nle-green));
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.nle-export-progress-text {
+  display: block;
+  font-size: 11px;
+  color: var(--nle-text-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.nle-export-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--nle-bg-panel);
+  border-top: 1px solid var(--nle-bg-darkest);
+}
+
+.nle-export-footer button {
+  padding: 5px 16px;
+  height: 28px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.nle-export-cancel-btn {
+  background: var(--nle-border-subtle);
+  border: 1px solid var(--nle-bg-dark);
+  color: var(--nle-text-light);
+}
+
+.nle-export-cancel-btn:hover {
+  background: var(--nle-bg-medium);
+  color: var(--nle-text);
+}
+
+.nle-export-start-btn {
+  background: var(--nle-accent);
+  border: 1px solid var(--nle-accent);
+  color: var(--nle-white);
+}
+
+.nle-export-start-btn:hover {
+  background: var(--nle-accent-hover);
+}
+
+.nle-export-start-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Menu Bar ── */
+.nle-menubar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--nle-bg-menubar);
+  border-bottom: 1px solid var(--nle-bg-darkest);
+  height: 24px;
+  min-height: 24px;
+  padding: 0 4px;
+  user-select: none;
+}
+
+.nle-menu-item {
+  position: relative;
+  padding: 0 10px;
+  background: none;
+  border: none;
+  color: var(--nle-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 24px;
+  height: 24px;
+  transition: background 0.08s, color 0.08s;
+}
+
+.nle-menu-item:hover {
+  background: var(--nle-bg-medium);
+  color: var(--nle-text-bright);
+}
+
+.nle-menu-item.active,
+.nle-menu-item.open {
+  background: var(--nle-bg-medium);
+  color: var(--nle-text-bright);
+}
+
+.nle-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--nle-bg-dark);
+  border: 1px solid var(--nle-bg-darkest);
+  border-radius: 4px;
+  min-width: 220px;
+  padding: 4px 0;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  z-index: var(--z-sticky);
+}
+
+.nle-menu-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 12px;
+  color: var(--nle-text);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.08s;
+  border-left: 2px solid transparent;
+}
+
+.nle-menu-dropdown-item:hover {
+  background: var(--nle-accent);
+  border-left-color: var(--nle-accent);
+  color: var(--nle-white);
+}
+
+.nle-menu-dropdown-item .shortcut {
+  color: var(--nle-text-dim);
+  font-size: 11px;
+  margin-left: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.nle-menu-dropdown-item:hover .shortcut {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.nle-menu-dropdown-item.disabled {
+  color: var(--nle-border-medium);
+  cursor: default;
+}
+
+/* Submenu support */
+.nle-menu-submenu-trigger {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+}
+
+.nle-menu-arrow {
+  font-size: 8px;
+  color: var(--nle-text-dim);
+}
+
+.nle-menu-submenu {
+  display: none;
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  min-width: 140px;
+}
+
+.nle-menu-submenu-trigger:hover > .nle-menu-submenu {
+  display: block;
+}
+
+.nle-menu-dropdown-item.disabled:hover {
+  background: transparent;
+  border-left-color: transparent;
+  color: var(--nle-border-medium);
+}
+
+.nle-menu-dropdown-item.disabled .shortcut {
+  color: var(--nle-border-dark);
+}
+
+.nle-menu-divider {
+  height: 1px;
+  background: var(--nle-bg-dark);
+  margin: 4px 8px;
+}
+
+/* ── Timecode Inline Edit ── */
+.nle-timecode {
+  cursor: pointer;
+}
+
+.nle-timecode-input {
+  background: var(--nle-bg-darkest);
+  border: 1px solid var(--nle-accent);
+  border-radius: 2px;
+  color: var(--nle-text);
+  font-family: 'Courier New', monospace;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 4px;
+  width: 8em;
+  outline: none;
+  box-sizing: border-box;
+}

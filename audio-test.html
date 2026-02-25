@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Essential Audio Effect Chain — Diagnostic Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; background: #1a1a2e; color: #e0e0e0; padding: 24px; }
+    h1 { font-size: 18px; margin-bottom: 8px; color: #7fdbca; }
+    h2 { font-size: 14px; margin: 16px 0 8px; color: #c792ea; }
+    .section { background: #16213e; border: 1px solid #2a2a4a; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    button { background: #0f3460; color: #e0e0e0; border: 1px solid #3a3a6a; border-radius: 4px; padding: 8px 16px; cursor: pointer; font-size: 13px; }
+    button:hover { background: #1a5276; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.active { background: #e94560; border-color: #e94560; }
+    input[type="file"] { font-size: 13px; }
+    #log { background: #0a0a1a; border: 1px solid #2a2a4a; border-radius: 4px; padding: 12px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.6; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+    .log-info { color: #7fdbca; }
+    .log-warn { color: #f7c948; }
+    .log-error { color: #e94560; }
+    .log-node { color: #c792ea; }
+    .log-chain { color: #82aaff; }
+    canvas { border: 1px solid #2a2a4a; border-radius: 4px; background: #0a0a1a; display: block; margin-top: 8px; }
+    .status { font-size: 12px; color: #888; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Essential Audio Effect Chain — Diagnostic Test</h1>
+  <p class="status">Reproduces the exact buildChain() from EssentialAudioEffect.js to isolate audio bugs.</p>
+  <p class="status">Serve via Vite dev server: <code>http://localhost:5174/VE2/audio-test.html</code></p>
+
+  <div class="section">
+    <h2>1. Load Audio</h2>
+    <div class="controls">
+      <input type="file" id="fileInput" accept="audio/*,video/*">
+      <span id="fileStatus" class="status">No file loaded</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2. Playback Controls</h2>
+    <div class="controls">
+      <button id="btnDirect" disabled>Play Direct (no effects)</button>
+      <button id="btnChain" disabled>Play With Chain (essential-audio)</button>
+      <button id="btnSimple" disabled>Play With Simple Filter (1x BiquadFilter)</button>
+      <button id="btnStop" disabled>Stop</button>
+      <button id="btnProgressive" disabled style="background:#1a3a1a;border-color:#2a6a2a">Progressive Chain Test</button>
+    </div>
+    <div class="status" id="playStatus">Idle</div>
+  </div>
+
+  <div class="grid">
+    <div class="section">
+      <h2>3. Visualizer</h2>
+      <canvas id="visualizer" width="400" height="150"></canvas>
+      <div class="status" id="vizStatus">No audio playing</div>
+    </div>
+    <div class="section">
+      <h2>4. Chain Node Inspector</h2>
+      <div id="nodeInfo" class="status">Build chain to see node details</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>5. Diagnostic Log</h2>
+    <div id="log"></div>
+  </div>
+
+  <script>
+    // ========================================================================
+    // Diagnostic Logger
+    // ========================================================================
+    const logEl = document.getElementById('log');
+    function log(msg, cls = 'log-info') {
+      const ts = new Date().toISOString().slice(11, 23);
+      const line = document.createElement('div');
+      line.className = cls;
+      line.textContent = `[${ts}] ${msg}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // ========================================================================
+    // State
+    // ========================================================================
+    let audioCtx = null;
+    let audioBuffer = null;
+    let currentSource = null;
+    let analyserNode = null;
+    let animFrameId = null;
+
+    const fileInput = document.getElementById('fileInput');
+    const fileStatus = document.getElementById('fileStatus');
+    const playStatus = document.getElementById('playStatus');
+    const vizStatus = document.getElementById('vizStatus');
+    const nodeInfoEl = document.getElementById('nodeInfo');
+    const btnDirect = document.getElementById('btnDirect');
+    const btnChain = document.getElementById('btnChain');
+    const btnSimple = document.getElementById('btnSimple');
+    const btnStop = document.getElementById('btnStop');
+    const btnProgressive = document.getElementById('btnProgressive');
+    const canvas = document.getElementById('visualizer');
+    const canvasCtx = canvas.getContext('2d');
+
+    // ========================================================================
+    // File Loading (same approach as AudioMixer: fetch + decodeAudioData)
+    // ========================================================================
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      log(`Loading file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB, type: ${file.type})`);
+      fileStatus.textContent = 'Decoding...';
+
+      try {
+        if (!audioCtx) {
+          audioCtx = new AudioContext();
+          log(`AudioContext created: sampleRate=${audioCtx.sampleRate}, state=${audioCtx.state}`);
+        }
+
+        if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+          log('AudioContext resumed from suspended state');
+        }
+
+        // Match AudioMixer approach: fetch via object URL + decodeAudioData
+        const objectUrl = URL.createObjectURL(file);
+        log(`Created object URL: ${objectUrl.slice(0, 60)}...`);
+
+        const response = await fetch(objectUrl);
+        if (!response.ok) {
+          throw new Error(`Fetch failed: HTTP ${response.status}`);
+        }
+        log(`Fetch OK, reading arrayBuffer...`);
+
+        const arrayBuffer = await response.arrayBuffer();
+        log(`ArrayBuffer size: ${arrayBuffer.byteLength} bytes`);
+
+        audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        log(`Decoded: ${audioBuffer.duration.toFixed(2)}s, ${audioBuffer.numberOfChannels}ch, ${audioBuffer.sampleRate}Hz`);
+
+        URL.revokeObjectURL(objectUrl);
+        fileStatus.textContent = `${file.name} — ${audioBuffer.duration.toFixed(1)}s, ${audioBuffer.numberOfChannels}ch`;
+
+        btnDirect.disabled = false;
+        btnChain.disabled = false;
+        btnSimple.disabled = false;
+        btnProgressive.disabled = false;
+      } catch (err) {
+        log(`DECODE ERROR: ${err.message}`, 'log-error');
+        fileStatus.textContent = `Error: ${err.message}`;
+      }
+    });
+
+    // ========================================================================
+    // Stop
+    // ========================================================================
+    function stopPlayback() {
+      if (currentSource) {
+        try { currentSource.stop(); } catch (_) {}
+        try { currentSource.disconnect(); } catch (_) {}
+        currentSource = null;
+      }
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+      btnStop.disabled = true;
+      playStatus.textContent = 'Stopped';
+      vizStatus.textContent = 'No audio playing';
+      // Clear canvas
+      canvasCtx.fillStyle = '#0a0a1a';
+      canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+      log('Playback stopped');
+    }
+    btnStop.addEventListener('click', stopPlayback);
+
+    // ========================================================================
+    // Visualizer
+    // ========================================================================
+    function startVisualizer() {
+      if (!analyserNode) return;
+
+      const bufLen = analyserNode.frequencyBinCount;
+      const dataArray = new Uint8Array(bufLen);
+
+      function draw() {
+        animFrameId = requestAnimationFrame(draw);
+        analyserNode.getByteFrequencyData(dataArray);
+
+        canvasCtx.fillStyle = '#0a0a1a';
+        canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const barWidth = (canvas.width / bufLen) * 2.5;
+        let x = 0;
+
+        let maxVal = 0;
+        for (let i = 0; i < bufLen; i++) {
+          const barHeight = (dataArray[i] / 255) * canvas.height;
+          maxVal = Math.max(maxVal, dataArray[i]);
+
+          const hue = (i / bufLen) * 240 + 160; // blue to purple
+          canvasCtx.fillStyle = `hsl(${hue}, 70%, ${40 + barHeight / canvas.height * 30}%)`;
+          canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+          x += barWidth + 1;
+        }
+
+        vizStatus.textContent = `Peak: ${maxVal}/255 | Bins: ${bufLen}`;
+      }
+
+      draw();
+    }
+
+    // ========================================================================
+    // REVERB PRESETS (copied from EssentialAudioEffect.js)
+    // ========================================================================
+    const REVERB_PRESETS = {
+      'auditorium': 2.5, 'church': 3.5, 'large-reflective': 2.0, 'outside-club': 1.2,
+      'warm-room': 1.0, 'warm-voice': 0.6, 'thicken-voice': 0.4,
+      'heavy': 3.0, 'light': 0.8, 'outside': 1.5, 'room': 1.0,
+      'large-room-amb': 2.5, 'outside-amb': 1.8, 'room-amb': 1.2, 'wind-effect': 2.0
+    };
+
+    // ========================================================================
+    // DEFAULT PARAMS (copied exactly from EssentialAudioEffect.js)
+    // ========================================================================
+    const DEFAULT_PARAMS = {
+      loudness_enabled: false,
+      loudness_target: -23,
+      loudness_gain: 0,
+      repair_noise: 0,
+      repair_rumble: 0,
+      repair_dehum: 0,
+      repair_dehum_freq: 60,
+      repair_deess: 0,
+      repair_reverb: 0,
+      clarity_dynamics: 0,
+      clarity_eq_preset: 'none',
+      clarity_eq_amount: 0,
+      clarity_enhance: false,
+      clarity_enhance_tone: 'high',
+      duck_enabled: false,
+      duck_against_dialogue: true,
+      duck_against_sfx: false,
+      duck_against_ambience: false,
+      duck_against_untagged: false,
+      duck_sensitivity: 5,
+      duck_amount: -6,
+      duck_fades: 500,
+      duck_fade_position: 'outside',
+      creative_reverb: 0,
+      creative_reverb_preset: 'none',
+      creative_reverb_decay: 1.5,
+      creative_stereo_width: 100,
+      creative_pan: 0,
+      eq_enabled: false,
+      eq_lp_freq: 200,   eq_lp_gain: 0,
+      eq_m1_freq: 500,   eq_m1_gain: 0,  eq_m1_q: 1,
+      eq_m2_freq: 2000,  eq_m2_gain: 0,  eq_m2_q: 1,
+      eq_m3_freq: 5000,  eq_m3_gain: 0,  eq_m3_q: 1,
+      eq_hp_freq: 8000,  eq_hp_gain: 0,
+    };
+
+    // ========================================================================
+    // generateIR (copied exactly from EssentialAudioEffect.js)
+    // ========================================================================
+    function generateIR(ctx, duration, sampleRate) {
+      const length = Math.ceil(duration * sampleRate);
+      const buffer = ctx.createBuffer(2, length, sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const data = buffer.getChannelData(ch);
+        for (let i = 0; i < length; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+        }
+      }
+      return buffer;
+    }
+
+    // ========================================================================
+    // buildChain (EXACT copy from EssentialAudioEffect.js)
+    // ========================================================================
+    function buildChain(ctx, params) {
+      const nodeMap = {};
+      const sr = ctx.sampleRate;
+      const chain = [];
+
+      const biquad = (role, type, freq, q, gain) => {
+        const f = ctx.createBiquadFilter();
+        f.type = type;
+        f.frequency.value = freq;
+        if (q !== undefined) f.Q.value = q;
+        if (gain !== undefined) f.gain.value = gain;
+        chain.push(f);
+        nodeMap[role] = f;
+        return f;
+      };
+
+      // --- Rumble ---
+      biquad('rumble', 'highpass',
+        params.repair_rumble > 0 ? 40 + params.repair_rumble * 8 : 20,
+        0.7);
+
+      // --- DeHum ---
+      const dehumFreq = params.repair_dehum_freq || 60;
+      for (let h = 1; h <= 3; h++) {
+        biquad(`dehum${h}`, 'notch',
+          dehumFreq * h,
+          params.repair_dehum > 0 ? 10 + params.repair_dehum * 5 : 100);
+      }
+
+      // --- DeEss ---
+      biquad('deess', 'peaking', 6500, 2,
+        params.repair_deess > 0 ? -params.repair_deess * 1.5 : 0);
+
+      // --- Noise reduction ---
+      biquad('noise', 'highpass',
+        params.repair_noise > 0 ? 80 + params.repair_noise * 20 : 20,
+        0.5);
+
+      // --- Reverb reduction ---
+      biquad('revredHP', 'highpass',
+        params.repair_reverb > 0 ? 150 + params.repair_reverb * 15 : 20,
+        0.5);
+      biquad('revredShelf', 'lowshelf', 300, undefined,
+        params.repair_reverb > 0 ? -params.repair_reverb * 1.2 : 0);
+
+      // --- Dynamics compressor ---
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = params.clarity_dynamics > 0 ? -10 - params.clarity_dynamics * 3 : 0;
+      comp.knee.value = 10;
+      comp.ratio.value = params.clarity_dynamics > 0 ? 1 + params.clarity_dynamics * 0.5 : 1;
+      comp.attack.value = 0.003;
+      comp.release.value = 0.15;
+      chain.push(comp);
+      nodeMap.dynamics = comp;
+
+      // --- Vocal enhance ---
+      const enhFreq = params.clarity_enhance_tone === 'low' ? 2000 : 4000;
+      biquad('enhance', 'peaking', enhFreq, 0.8,
+        params.clarity_enhance ? 4 : 0);
+
+      // --- 5-band Parametric EQ ---
+      biquad('eqLP', 'lowshelf', params.eq_lp_freq || 200, undefined,
+        params.eq_enabled ? (params.eq_lp_gain || 0) : 0);
+      biquad('eqM1', 'peaking', params.eq_m1_freq || 500, params.eq_m1_q || 1,
+        params.eq_enabled ? (params.eq_m1_gain || 0) : 0);
+      biquad('eqM2', 'peaking', params.eq_m2_freq || 2000, params.eq_m2_q || 1,
+        params.eq_enabled ? (params.eq_m2_gain || 0) : 0);
+      biquad('eqM3', 'peaking', params.eq_m3_freq || 5000, params.eq_m3_q || 1,
+        params.eq_enabled ? (params.eq_m3_gain || 0) : 0);
+      biquad('eqHP', 'highshelf', params.eq_hp_freq || 8000, undefined,
+        params.eq_enabled ? (params.eq_hp_gain || 0) : 0);
+
+      // --- Creative reverb (only when active) ---
+      const hasReverb = params.creative_reverb_preset && params.creative_reverb_preset !== 'none' && params.creative_reverb > 0;
+      let reverbInput, reverbDry, reverbWet, reverbOut, convolver;
+      if (hasReverb) {
+        reverbInput = ctx.createGain();
+        reverbInput.gain.value = 1;
+        reverbDry = ctx.createGain();
+        reverbWet = ctx.createGain();
+        reverbOut = ctx.createGain();
+        reverbOut.gain.value = 1;
+        const wet = params.creative_reverb / 100;
+        reverbDry.gain.value = 1 - wet * 0.5;
+        reverbWet.gain.value = wet;
+        const decay = REVERB_PRESETS[params.creative_reverb_preset] || params.creative_reverb_decay || 1.5;
+        convolver = ctx.createConvolver();
+        convolver.buffer = generateIR(ctx, Math.max(0.1, decay), sr);
+        reverbInput.connect(reverbDry);
+        reverbInput.connect(convolver);
+        convolver.connect(reverbWet);
+        reverbDry.connect(reverbOut);
+        reverbWet.connect(reverbOut);
+        nodeMap.reverbDry = reverbDry;
+        nodeMap.reverbWet = reverbWet;
+        nodeMap.reverbConvolver = convolver;
+      }
+
+      // --- Pan ---
+      const panner = ctx.createStereoPanner();
+      panner.pan.value = (params.creative_pan || 0) / 100;
+      nodeMap.pan = panner;
+
+      // --- Stereo width ---
+      const widthGain = ctx.createGain();
+      widthGain.gain.value = 1;
+      nodeMap.widthGain = widthGain;
+
+      // --- Loudness gain ---
+      const loudnessGain = ctx.createGain();
+      loudnessGain.gain.value = (params.loudness_enabled && params.loudness_gain)
+        ? Math.pow(10, params.loudness_gain / 20) : 1;
+      nodeMap.loudness = loudnessGain;
+
+      // Wire the linear chain
+      for (let i = 1; i < chain.length; i++) {
+        chain[i - 1].connect(chain[i]);
+      }
+
+      // After linear chain: -> [reverb if active] -> panner -> width -> loudness
+      const lastChainNode = chain[chain.length - 1];
+      if (hasReverb) {
+        lastChainNode.connect(reverbInput);
+        reverbOut.connect(panner);
+      } else {
+        lastChainNode.connect(panner);
+      }
+      panner.connect(widthGain);
+      widthGain.connect(loudnessGain);
+
+      return {
+        input: chain[0],
+        output: loudnessGain,
+        _nodeMap: nodeMap,
+        // Extra: expose chain array for diagnostics
+        _chain: chain
+      };
+    }
+
+    // ========================================================================
+    // Log chain node details to page
+    // ========================================================================
+    function logChainDetails(result) {
+      log('--- Chain Node Details ---', 'log-chain');
+      log(`Linear chain length: ${result._chain.length} nodes`, 'log-chain');
+
+      for (let i = 0; i < result._chain.length; i++) {
+        const n = result._chain[i];
+        const type = n.constructor.name;
+        if (n instanceof BiquadFilterNode) {
+          log(`  [${i}] ${type}: filter=${n.type}, freq=${n.frequency.value.toFixed(1)}Hz, Q=${n.Q.value.toFixed(3)}, gain=${n.gain.value.toFixed(3)}`, 'log-node');
+        } else if (n instanceof DynamicsCompressorNode) {
+          log(`  [${i}] ${type}: threshold=${n.threshold.value}dB, ratio=${n.ratio.value}, knee=${n.knee.value}`, 'log-node');
+        } else {
+          log(`  [${i}] ${type}`, 'log-node');
+        }
+      }
+
+      // Log the post-chain nodes
+      const nm = result._nodeMap;
+      log(`Post-chain: reverbDry.gain=${nm.reverbDry.gain.value.toFixed(3)}, reverbWet.gain=${nm.reverbWet.gain.value.toFixed(3)}`, 'log-node');
+      log(`Post-chain: convolver buffer duration=${nm.reverbConvolver.buffer.duration.toFixed(3)}s`, 'log-node');
+      log(`Post-chain: pan=${nm.pan.pan.value}, widthGain=${nm.widthGain.gain.value}, loudness=${nm.loudness.gain.value}`, 'log-node');
+
+      // Update node info panel
+      let html = '';
+      html += `<strong>Linear chain:</strong> ${result._chain.length} nodes\n`;
+      for (let i = 0; i < result._chain.length; i++) {
+        const n = result._chain[i];
+        if (n instanceof BiquadFilterNode) {
+          html += `[${i}] Biquad: ${n.type} f=${n.frequency.value.toFixed(0)}Hz Q=${n.Q.value.toFixed(3)} g=${n.gain.value.toFixed(1)}\n`;
+        } else if (n instanceof DynamicsCompressorNode) {
+          html += `[${i}] Compressor: thr=${n.threshold.value}dB ratio=${n.ratio.value}\n`;
+        }
+      }
+      html += `\n<strong>Post-chain:</strong>\n`;
+      html += `reverbDry: ${nm.reverbDry.gain.value.toFixed(3)}\n`;
+      html += `reverbWet: ${nm.reverbWet.gain.value.toFixed(3)}\n`;
+      html += `convolver: ${nm.reverbConvolver.buffer.duration.toFixed(3)}s\n`;
+      html += `pan: ${nm.pan.pan.value}\n`;
+      html += `widthGain: ${nm.widthGain.gain.value}\n`;
+      html += `loudness: ${nm.loudness.gain.value}\n`;
+      nodeInfoEl.innerHTML = `<pre style="margin:0;font-size:11px;line-height:1.5">${html}</pre>`;
+    }
+
+    // ========================================================================
+    // Play: Direct (no effects)
+    // ========================================================================
+    btnDirect.addEventListener('click', () => {
+      stopPlayback();
+      log('=== PLAY DIRECT (no effects) ===');
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+
+      analyserNode = audioCtx.createAnalyser();
+      analyserNode.fftSize = 256;
+      analyserNode.smoothingTimeConstant = 0.8;
+
+      source.connect(analyserNode);
+      analyserNode.connect(audioCtx.destination);
+
+      source.start(0);
+      currentSource = source;
+      btnStop.disabled = false;
+      playStatus.textContent = 'Playing: Direct (no effects)';
+      log('Source -> Analyser -> Destination');
+      log(`Source state: buffer=${!!source.buffer}, channels=${audioBuffer.numberOfChannels}`);
+
+      source.onended = () => {
+        log('Source ended (natural end)', 'log-info');
+        playStatus.textContent = 'Ended';
+      };
+
+      startVisualizer();
+    });
+
+    // ========================================================================
+    // Play: With Full Chain (exact EssentialAudioEffect buildChain)
+    // ========================================================================
+    btnChain.addEventListener('click', () => {
+      stopPlayback();
+      log('=== PLAY WITH CHAIN (essential-audio, default params) ===');
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+
+      // Build the chain with default params (exact same as EssentialAudioEffect.js)
+      let chainResult;
+      try {
+        chainResult = buildChain(audioCtx, { ...DEFAULT_PARAMS });
+        log('buildChain() succeeded', 'log-info');
+      } catch (err) {
+        log(`buildChain() FAILED: ${err.message}\n${err.stack}`, 'log-error');
+        return;
+      }
+
+      logChainDetails(chainResult);
+
+      analyserNode = audioCtx.createAnalyser();
+      analyserNode.fftSize = 256;
+      analyserNode.smoothingTimeConstant = 0.8;
+
+      // Wire exactly as AudioMixer does:
+      // source -> chain.input ... chain.output -> analyser -> destination
+      const node = chainResult;
+      if (node.input && node.output) {
+        source.connect(node.input);
+        log('Source -> chain.input (compound node with input/output)', 'log-chain');
+        node.output.connect(analyserNode);
+        log('chain.output -> Analyser', 'log-chain');
+      } else {
+        source.connect(node);
+        log('Source -> chain (simple node)', 'log-chain');
+        node.connect(analyserNode);
+      }
+      analyserNode.connect(audioCtx.destination);
+      log('Analyser -> Destination', 'log-chain');
+
+      source.start(0);
+      currentSource = source;
+      btnStop.disabled = false;
+      playStatus.textContent = 'Playing: With Chain (essential-audio defaults)';
+
+      source.onended = () => {
+        log('Source ended (natural end)', 'log-info');
+        playStatus.textContent = 'Ended';
+      };
+
+      startVisualizer();
+    });
+
+    // ========================================================================
+    // Play: Simple Filter (single BiquadFilter to isolate chain complexity)
+    // ========================================================================
+    btnSimple.addEventListener('click', () => {
+      stopPlayback();
+      log('=== PLAY WITH SIMPLE FILTER (1x BiquadFilter, bypass-mode) ===');
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+
+      // Single biquad in bypass mode (gain=0 on a peaking filter = passthrough)
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'peaking';
+      filter.frequency.value = 1000;
+      filter.Q.value = 1;
+      filter.gain.value = 0; // passthrough
+      log(`BiquadFilter: type=peaking, freq=1000Hz, Q=1, gain=0 (passthrough)`, 'log-node');
+
+      analyserNode = audioCtx.createAnalyser();
+      analyserNode.fftSize = 256;
+      analyserNode.smoothingTimeConstant = 0.8;
+
+      source.connect(filter);
+      filter.connect(analyserNode);
+      analyserNode.connect(audioCtx.destination);
+      log('Source -> BiquadFilter -> Analyser -> Destination', 'log-chain');
+
+      source.start(0);
+      currentSource = source;
+      btnStop.disabled = false;
+      playStatus.textContent = 'Playing: Simple Filter (1x Biquad passthrough)';
+
+      source.onended = () => {
+        log('Source ended (natural end)', 'log-info');
+        playStatus.textContent = 'Ended';
+      };
+
+      startVisualizer();
+    });
+
+    // ========================================================================
+    // Progressive Chain Test — isolates which node kills audio
+    // ========================================================================
+    const CHAIN_NODE_NAMES = [
+      'rumble (highpass 20Hz)',
+      'dehum1 (notch 60Hz)',
+      'dehum2 (notch 120Hz)',
+      'dehum3 (notch 180Hz)',
+      'deess (peaking 6500Hz)',
+      'noise (highpass 20Hz)',
+      'revredHP (highpass 20Hz)',
+      'revredShelf (lowshelf 300Hz)',
+      'dynamics (compressor)',
+      'enhance (peaking 4000Hz)',
+      'eqLP (lowshelf 200Hz)',
+      'eqM1 (peaking 500Hz)',
+      'eqM2 (peaking 2000Hz)',
+      'eqM3 (peaking 5000Hz)',
+      'eqHP (highshelf 8000Hz)',
+    ];
+
+    // Measure peak level from an AnalyserNode over a given duration
+    function measurePeak(analyser, durationMs) {
+      return new Promise((resolve) => {
+        const bufLen = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufLen);
+        let maxPeak = 0;
+        const startTime = performance.now();
+
+        function sample() {
+          analyser.getByteFrequencyData(dataArray);
+          for (let i = 0; i < bufLen; i++) {
+            if (dataArray[i] > maxPeak) maxPeak = dataArray[i];
+          }
+          if (performance.now() - startTime < durationMs) {
+            requestAnimationFrame(sample);
+          } else {
+            resolve(maxPeak);
+          }
+        }
+        requestAnimationFrame(sample);
+      });
+    }
+
+    // Run a single sub-chain test: wire nodes, play, measure, teardown
+    // wireCallback(source, analyser) should wire the graph and NOT connect analyser to destination
+    async function runSubTest(testId, description, wireCallback) {
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.3; // Lower smoothing for faster response
+
+      // Let the wireCallback build the sub-chain
+      wireCallback(source, analyser);
+
+      // Connect analyser to destination so we can hear + measure
+      analyser.connect(audioCtx.destination);
+
+      source.onended = () => {
+        log(`  Source ended for test ${testId}`, 'log-info');
+      };
+
+      // Start playback
+      source.start(0);
+
+      // Measure for 300ms
+      const peak = await measurePeak(analyser, 300);
+
+      // Stop and disconnect
+      try { source.stop(); } catch (_) {}
+      try { source.disconnect(); } catch (_) {}
+      try { analyser.disconnect(); } catch (_) {}
+
+      const pass = peak >= 5;
+      const status = pass ? 'PASS' : 'FAIL';
+      const cls = pass ? 'log-info' : 'log-error';
+      log(`Test ${testId}: ${description} -> peak=${peak} [${status}]`, cls);
+
+      return { testId, description, peak, pass };
+    }
+
+    // Sleep utility
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    btnProgressive.addEventListener('click', async () => {
+      stopPlayback();
+      btnProgressive.disabled = true;
+      btnDirect.disabled = true;
+      btnChain.disabled = true;
+      btnSimple.disabled = true;
+
+      log('');
+      log('============================================================', 'log-chain');
+      log('  PROGRESSIVE CHAIN TEST — Finding the silence point', 'log-chain');
+      log('============================================================', 'log-chain');
+      log('');
+
+      // Build chain once to get the node references (we need them for wiring)
+      // But we WON'T use its internal wiring — we manually wire sub-chains each time
+      const params = { ...DEFAULT_PARAMS };
+      const refChain = buildChain(audioCtx, params);
+      const chain = refChain._chain;
+      const nm = refChain._nodeMap;
+
+      log(`Chain has ${chain.length} linear nodes + 5 post-chain stages`, 'log-chain');
+      log('Running 20 progressive tests with 500ms gaps...', 'log-chain');
+      log('');
+
+      const results = [];
+
+      // Tests 1-15: Progressive linear chain nodes
+      // IMPORTANT: each test builds a FRESH chain because nodes from a previous
+      // buildChain() may already be connected. We call buildChain each time.
+      for (let n = 0; n < chain.length; n++) {
+        const testId = n + 1;
+        const desc = `chain[0..${n}] — ${CHAIN_NODE_NAMES[n] || 'unknown'}`;
+
+        playStatus.textContent = `Progressive test ${testId}/20: ${CHAIN_NODE_NAMES[n] || 'unknown'}`;
+
+        const result = await runSubTest(testId, desc, (source, analyser) => {
+          // Build a fresh chain for isolation
+          const fresh = buildChain(audioCtx, params);
+          // Disconnect the full chain's internal wiring after the node we want
+          // Instead, just wire source through chain[0..n] manually using fresh nodes
+          // The fresh chain is already internally wired (chain[0]->chain[1]->...->chain[14])
+          // So connect source to chain[0], and chain[n] to analyser
+          source.connect(fresh._chain[0]);
+          fresh._chain[n].connect(analyser);
+        });
+        results.push(result);
+        await sleep(500);
+      }
+
+      // Test 16: Full linear chain -> reverbInput -> reverbDry -> reverbOut (dry path only, skip convolver)
+      // Note: reverbOut is a GainNode not stored in nodeMap, but panner receives from it.
+      // So we disconnect convolver/wet path, then tap at panner (which receives only dry signal).
+      {
+        const testId = 16;
+        const desc = 'chain[0..14] -> reverbInput -> reverbDry -> reverbOut (dry only, no convolver)';
+        playStatus.textContent = `Progressive test ${testId}/20: reverb dry path`;
+
+        const result = await runSubTest(testId, desc, (source, analyser) => {
+          const fresh = buildChain(audioCtx, params);
+          // Kill the convolver/wet path so only dry flows through
+          try { fresh._nodeMap.reverbConvolver.disconnect(); } catch (_) {}
+          try { fresh._nodeMap.reverbWet.disconnect(); } catch (_) {}
+
+          source.connect(fresh._chain[0]);
+          // chain[14] -> reverbInput -> reverbDry -> reverbOut -> panner (already wired)
+          // Tap at panner (receives from reverbOut which only has dry signal now)
+          try { fresh._nodeMap.pan.disconnect(); } catch (_) {}
+          fresh._nodeMap.pan.connect(analyser);
+        });
+        results.push(result);
+        await sleep(500);
+      }
+
+      // Test 17: Full linear chain -> full reverb (dry + convolver wet) -> reverbOut
+      // Tap at panner which receives from reverbOut (both dry and wet paths active)
+      {
+        const testId = 17;
+        const desc = 'chain[0..14] -> reverbInput -> [full reverb dry+wet] -> reverbOut -> panner';
+        playStatus.textContent = `Progressive test ${testId}/20: full reverb`;
+
+        const result = await runSubTest(testId, desc, (source, analyser) => {
+          const fresh = buildChain(audioCtx, params);
+          source.connect(fresh._chain[0]);
+          // Full reverb path intact (dry+wet both flow to reverbOut -> panner)
+          try { fresh._nodeMap.pan.disconnect(); } catch (_) {}
+          fresh._nodeMap.pan.connect(analyser);
+        });
+        results.push(result);
+        await sleep(500);
+      }
+
+      // Test 18: Full chain through panner
+      {
+        const testId = 18;
+        const desc = 'chain[0..14] -> reverb -> panner -> analyser';
+        playStatus.textContent = `Progressive test ${testId}/20: through panner`;
+
+        const result = await runSubTest(testId, desc, (source, analyser) => {
+          const fresh = buildChain(audioCtx, params);
+          source.connect(fresh._chain[0]);
+          // panner is already connected to widthGain by buildChain, just tap after panner
+          try { fresh._nodeMap.pan.disconnect(); } catch (_) {}
+          fresh._nodeMap.pan.connect(analyser);
+        });
+        results.push(result);
+        await sleep(500);
+      }
+
+      // Test 19: Full chain through widthGain
+      {
+        const testId = 19;
+        const desc = 'chain[0..14] -> reverb -> panner -> widthGain -> analyser';
+        playStatus.textContent = `Progressive test ${testId}/20: through widthGain`;
+
+        const result = await runSubTest(testId, desc, (source, analyser) => {
+          const fresh = buildChain(audioCtx, params);
+          source.connect(fresh._chain[0]);
+          try { fresh._nodeMap.widthGain.disconnect(); } catch (_) {}
+          fresh._nodeMap.widthGain.connect(analyser);
+        });
+        results.push(result);
+        await sleep(500);
+      }
+
+      // Test 20: Complete chain (source -> input ... output -> analyser)
+      {
+        const testId = 20;
+        const desc = 'COMPLETE: chain[0..14] -> reverb -> panner -> widthGain -> loudness -> analyser';
+        playStatus.textContent = `Progressive test ${testId}/20: complete chain`;
+
+        const result = await runSubTest(testId, desc, (source, analyser) => {
+          const fresh = buildChain(audioCtx, params);
+          source.connect(fresh.input);
+          fresh.output.connect(analyser);
+        });
+        results.push(result);
+      }
+
+      // ---- Summary ----
+      log('');
+      log('============================================================', 'log-chain');
+      log('  PROGRESSIVE TEST SUMMARY', 'log-chain');
+      log('============================================================', 'log-chain');
+
+      let firstFail = null;
+      let lastPass = null;
+      for (const r of results) {
+        const marker = r.pass ? 'OK' : 'XX';
+        const cls = r.pass ? 'log-info' : 'log-error';
+        log(`  [${marker}] Test ${r.testId}: peak=${String(r.peak).padStart(3)} | ${r.description}`, cls);
+        if (r.pass) lastPass = r;
+        if (!r.pass && !firstFail) firstFail = r;
+      }
+
+      log('');
+      if (firstFail) {
+        log(`AUDIO DROPS TO SILENCE AT TEST ${firstFail.testId}: ${firstFail.description}`, 'log-error');
+        if (lastPass) {
+          log(`Last passing test was ${lastPass.testId}: ${lastPass.description}`, 'log-warn');
+        }
+      } else {
+        log('ALL TESTS PASSED — chain produces audio at every stage', 'log-info');
+        log('Bug may be in AudioMixer wiring, not buildChain() itself', 'log-warn');
+      }
+
+      playStatus.textContent = firstFail
+        ? `FOUND: Audio dies at test ${firstFail.testId} — ${firstFail.description}`
+        : 'All 20 tests passed — chain is OK';
+
+      // Re-enable buttons
+      btnProgressive.disabled = false;
+      btnDirect.disabled = false;
+      btnChain.disabled = false;
+      btnSimple.disabled = false;
+    });
+
+    // ========================================================================
+    // Initial log
+    // ========================================================================
+    log('Audio diagnostic test page loaded');
+    log('Pick an audio/video file and use the playback buttons to test');
+    log('Compare: Direct vs Chain vs Simple to isolate the bug location');
+    log('"Progressive Chain Test" will test each node one-by-one to find the exact failure point');
+  </script>
+</body>
+</html>

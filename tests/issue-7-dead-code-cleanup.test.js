@@ -169,7 +169,7 @@ const CLEAN_SOURCES = {
 
   'VLCDecoder.js': `
     import { createVLCBridge } from './VLCBridge.js';
-    import { mediaManager } from './MediaManager.js';
+    import logger from '../../utils/logger.js';
 
     export function createVLCDecoder() {
       let _bridge = null;
@@ -177,12 +177,6 @@ const CLEAN_SOURCES = {
 
       return {
         async init(mediaId, file) {
-          const probedBridges = mediaManager._vlcProbedBridges;
-          if (probedBridges && probedBridges.has(mediaId)) {
-            _bridge = probedBridges.get(mediaId);
-            probedBridges.delete(mediaId);
-            return;
-          }
           _bridge = createVLCBridge(mediaId);
           await _bridge.loadFile(file);
         },
@@ -196,12 +190,10 @@ const CLEAN_SOURCES = {
     import { createVLCBridge } from './VLCBridge.js';
 
     export const mediaManager = {
-      _vlcProbedBridges: new Map(),
-
       async probeMedia(file) {
-        const bridge = createVLCBridge('media-1');
+        const bridge = createVLCBridge('_probe_' + Date.now());
         await bridge.loadFile(file);
-        this._vlcProbedBridges.set('media-1', bridge);
+        bridge.release();
       }
     };
   `,
@@ -357,9 +349,9 @@ describe('Issue #7 — Comprehensive dead pattern scan', () => {
 });
 
 describe('Issue #7 — Renamed symbols are present (not dead)', () => {
-  it('_vlcProbedBridges exists (renamed from _mxfProbedBridges)', () => {
+  it('_vlcProbedBridges removed (probe bridges are now released immediately)', () => {
     const source = CLEAN_SOURCES['VLCDecoder.js'] + CLEAN_SOURCES['MediaManager.js'];
-    expect(/_vlcProbedBridges/.test(source)).toBe(true);
+    expect(/_vlcProbedBridges/.test(source)).toBe(false);
   });
 
   it('markFrameDecoded exists (renamed from markMXFFrameDecoded)', () => {

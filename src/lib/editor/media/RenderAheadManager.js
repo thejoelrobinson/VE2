@@ -9,6 +9,7 @@ import { getTransitionZone } from '../effects/Transitions.js';
 import { frameToSeconds } from '../timeline/TimelineMath.js';
 import { mediaManager } from './MediaManager.js';
 import { mediaDecoder } from './MediaDecoder.js';
+import { VLC_CONFIG } from './VLCBridge.js';
 import { MEDIA_TYPES } from '../core/Constants.js';
 import { editorState } from '../core/EditorState.js';
 import { clamp } from '../core/MathUtils.js';
@@ -17,7 +18,7 @@ import logger from '../../utils/logger.js';
 // Concurrency limit for parallel mediaDecoder.getFrame() calls.
 // Set to 1 because VLC WASM is single-threaded — concurrent requests
 // just queue up and timeout, creating cascading failures.
-const MAX_CONCURRENT_DECODES = 1;
+const MAX_CONCURRENT_DECODES = VLC_CONFIG.MAX_CONCURRENT_DECODES;
 
 export const renderAheadManager = {
   _frameBuffer: new Map(), // `${mediaId}_${timeMs}` -> ImageBitmap
@@ -40,6 +41,8 @@ export const renderAheadManager = {
   _exportPaused: false, // true while export is active (prevents decode contention)
   _pinned: false, // true during _buildRenderCommand (prevents eviction)
   _stateUnsub: null, // unsubscriber for editorState.subscribe
+  _idleFillRanges: null, // [{ mediaId, sourceStartMs, sourceEndMs, distance }] | null
+  _idleFillRangeIndex: 0, // cursor into _idleFillRanges for current fill cycle
 
   init() {
     if (this._initialized) return;
@@ -489,6 +492,126 @@ export const renderAheadManager = {
     return packetExtractWorker.extractPackets(mediaId, startTimeUs, endTimeUs, prependConfig);
   },
 
+  _getSessionForMedia(mediaId) {
+    try {
+      return mediaDecoder.getStreamSession(mediaId);
+    } catch (_) {
+      return null;
+    }
+  },
+
+  // Scan all non-muted video tracks, sample 5 timestamps per clip to check _decodedSources,
+  // return undecoded ranges sorted nearest-to-playhead first.
+  _getUndecodedClipRanges(playheadFrame, fps) {
+    const ranges = [];
+    const videoTracks = timelineEngine.getVideoTracks();
+    for (const track of videoTracks) {
+      if (track.muted) continue;
+      for (const clip of track.clips) {
+        if (clip.disabled || !clip.mediaId) continue;
+        const mediaItem = mediaManager.getItem(clip.mediaId);
+        if (!mediaItem || mediaItem.type !== MEDIA_TYPES.VIDEO) continue;
+
+        const sourceStartMs = Math.round((clip.sourceInFrame / fps) * 1000);
+        const sourceEndMs = Math.round((clip.sourceOutFrame / fps) * 1000);
+        if (sourceEndMs <= sourceStartMs) continue;
+
+        // Sample 5 timestamps — skip range if all already decoded
+        const SAMPLES = 5;
+        let decoded = 0;
+        for (let i = 0; i < SAMPLES; i++) {
+          const t = i / (SAMPLES - 1);
+          const ms = Math.round(sourceStartMs + t * (sourceEndMs - sourceStartMs));
+          if (this._decodedSources.has(`${clip.mediaId}_${ms}`)) decoded++;
+        }
+        if (decoded >= SAMPLES) continue;
+
+        // Distance: 0 if playhead is inside clip, else frames to nearest edge
+        const clipEnd = getClipEndFrame(clip);
+        const distance =
+          playheadFrame >= clip.startFrame && playheadFrame < clipEnd
+            ? 0
+            : playheadFrame < clip.startFrame
+              ? clip.startFrame - playheadFrame
+              : playheadFrame - clipEnd;
+
+        ranges.push({ mediaId: clip.mediaId, sourceStartMs, sourceEndMs, distance });
+      }
+    }
+    return ranges.sort((a, b) => a.distance - b.distance);
+  },
+
+  // Clip-aware idle fill: drives VLC clip-by-clip instead of frame-by-frame.
+  // Falls back to old _idleFillTick when all clip ranges are exhausted.
+  async _clipAwareIdleFillTick(gen) {
+    if (gen !== this._idleFillGen) return;
+    if (editorState.get(STATE_PATHS.PLAYBACK_PLAYING)) return;
+    if (this._exportPaused) return;
+
+    const fps = editorState.get(STATE_PATHS.PROJECT_FRAME_RATE) || 30;
+    const playheadFrame = editorState.get(STATE_PATHS.PLAYBACK_CURRENT_FRAME) || 0;
+
+    // Build (or refresh) range list once per fill cycle
+    if (!this._idleFillRanges) {
+      this._idleFillRanges = this._getUndecodedClipRanges(playheadFrame, fps);
+      this._idleFillRangeIndex = 0;
+    }
+
+    // Skip ranges that have since been decoded
+    while (
+      this._idleFillRangeIndex < this._idleFillRanges.length &&
+      this._decodedSources.has(
+        `${this._idleFillRanges[this._idleFillRangeIndex].mediaId}_${this._idleFillRanges[this._idleFillRangeIndex].sourceStartMs}`
+      )
+    ) {
+      this._idleFillRangeIndex++;
+    }
+
+    // All clip ranges done — hand off to old tick for unplaced/registered media
+    if (this._idleFillRangeIndex >= this._idleFillRanges.length) {
+      this._idleFillRanges = null;
+      this._idleFillTick(gen);
+      return;
+    }
+
+    // Buffer near capacity — back off
+    if (this._frameBuffer.size >= this._bufferLimit * 0.9) {
+      this._idleFillTimer = setTimeout(
+        () => this._clipAwareIdleFillTick(gen),
+        this._idleFillBackoffDelay
+      );
+      return;
+    }
+
+    const range = this._idleFillRanges[this._idleFillRangeIndex];
+    const session = this._getSessionForMedia(range.mediaId);
+
+    if (!session) {
+      this._idleFillRangeIndex++;
+      if (gen !== this._idleFillGen) return;
+      this._idleFillTimer = setTimeout(
+        () => this._clipAwareIdleFillTick(gen),
+        this._idleFillBaseDelay
+      );
+      return;
+    }
+
+    const clipDurationMs = range.sourceEndMs - range.sourceStartMs;
+    const maxWaitMs = Math.min(clipDurationMs + 1000, 20000);
+
+    await session.burstDecode(range.sourceStartMs, range.sourceEndMs, maxWaitMs);
+
+    if (gen !== this._idleFillGen) return;
+
+    this._idleFillRangeIndex++;
+    eventBus.emit(EDITOR_EVENTS.RENDER_BUFFER_CHANGED);
+
+    this._idleFillTimer = setTimeout(
+      () => this._clipAwareIdleFillTick(gen),
+      this._idleFillBaseDelay
+    );
+  },
+
   // Cap _decodedSources to prevent unbounded growth.
   // Evict oldest 20% when limit reached to avoid full-clear render bar flicker.
   _capDecodedSources() {
@@ -604,9 +727,9 @@ export const renderAheadManager = {
   // - 200ms base interval (gives VLC time to respond)
   // - Backoff to 2000ms when all frames in a tick were skipped/failed
   // - Awaits requestAhead completion before scheduling next tick
-  _idleFillFramesPerTick: 4,
-  _idleFillBaseDelay: 200,
-  _idleFillBackoffDelay: 2000,
+  _idleFillFramesPerTick: VLC_CONFIG.IDLE_FILL_FRAMES_PER_TICK,
+  _idleFillBaseDelay: VLC_CONFIG.IDLE_FILL_BASE_DELAY_MS,
+  _idleFillBackoffDelay: VLC_CONFIG.IDLE_FILL_BACKOFF_DELAY_MS,
 
   _startIdleFill() {
     if (editorState.get(STATE_PATHS.PLAYBACK_PLAYING)) return;
@@ -616,7 +739,11 @@ export const renderAheadManager = {
     this._idleFillFrame = playhead;
     this._idleFillPhase = 0; // 0=forward from playhead, 1=backward, 2=done
     this._idleFillBackFrame = playhead - this._idleFillFramesPerTick;
-    this._idleFillTick(this._idleFillGen);
+    // Reset clip-aware state
+    this._idleFillRanges = null;
+    this._idleFillRangeIndex = 0;
+    // Use clip-aware tick instead of frame-by-frame tick
+    this._clipAwareIdleFillTick(this._idleFillGen);
   },
 
   async _idleFillTick(gen) {
@@ -715,6 +842,8 @@ export const renderAheadManager = {
     this._activeConcurrent = 0;
     this._exportPaused = false;
     this._pinned = false;
+    this._idleFillRanges = null;
+    this._idleFillRangeIndex = 0;
     this._initialized = false;
   }
 };

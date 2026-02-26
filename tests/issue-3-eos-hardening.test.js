@@ -3,7 +3,7 @@
  *
  * After this issue is resolved:
  * - C-level _fs_guard_eos(mp) is enabled on every loaded media
- * - Duration throttle widened from durationMs - 200 to durationMs - 500
+ * - Duration throttle reduced to durationMs - 50 (cancel-main-loop.js is primary EOS defense)
  * - _recoverFromEos is lightweight (just clears atEos flag, no stop+reopen)
  * - EOS timeout relaxed from 400ms to 2000ms
  *
@@ -14,10 +14,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 // ── NEW hardened constants (issue #3 changes) ───────────────────────────────
 
 const EOS_TIMEOUT_MS = 2000;        // was 400ms
-const DURATION_THROTTLE_MS = 500;   // was 200ms
+const DURATION_THROTTLE_MS = 50;    // was 200ms, then 500ms, now 50ms
 
-// ── Duration throttle simulation (widened to 500ms) ─────────────────────────
-// Mirrors VLCWorker frame interceptor: pause VLC when within 500ms of media end
+// ── Duration throttle simulation (50ms margin) ──────────────────────────────
+// Mirrors VLCWorker frame interceptor: pause VLC when within 50ms of media end
 
 function durationThrottle(frameMs, durationMs, isPlaying) {
   if (isPlaying && durationMs > 0 && frameMs >= durationMs - DURATION_THROTTLE_MS) {
@@ -26,7 +26,7 @@ function durationThrottle(frameMs, durationMs, isPlaying) {
   return false;
 }
 
-// ── Duration clamp simulation (widened to 500ms) ────────────────────────────
+// ── Duration clamp simulation (50ms margin) ─────────────────────────────────
 // Clamp seek target so VLC never seeks past media end
 
 function clampSeekMs(timeMs, durationMs) {
@@ -93,47 +93,49 @@ function heavyweightRecoverFromEos(m, _module) {
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-describe('Issue #3 — Duration throttle widened to 500ms', () => {
-  it('triggers at durationMs - 500 (boundary)', () => {
-    // frameMs = 9500, durationMs = 10000 => 10000 - 9500 = 500, frameMs >= 9500
-    expect(durationThrottle(9500, 10000, true)).toBe(true);
+describe('Issue #3 — Duration throttle at 50ms', () => {
+  it('triggers at durationMs - 50 (boundary)', () => {
+    // frameMs = 9950, durationMs = 10000 => 10000 - 9950 = 50, frameMs >= 9950
+    expect(durationThrottle(9950, 10000, true)).toBe(true);
   });
 
-  it('does NOT trigger at durationMs - 501 (just outside window)', () => {
-    // frameMs = 9499, durationMs = 10000 => 9499 < 9500
-    expect(durationThrottle(9499, 10000, true)).toBe(false);
+  it('does NOT trigger at durationMs - 51 (just outside window)', () => {
+    // frameMs = 9949, durationMs = 10000 => 9949 < 9950
+    expect(durationThrottle(9949, 10000, true)).toBe(false);
   });
 
-  it('triggers when frame is within 500ms window', () => {
-    expect(durationThrottle(9600, 10000, true)).toBe(true);
-    expect(durationThrottle(9800, 10000, true)).toBe(true);
+  it('triggers when frame is within 50ms window', () => {
+    expect(durationThrottle(9960, 10000, true)).toBe(true);
+    expect(durationThrottle(9980, 10000, true)).toBe(true);
     expect(durationThrottle(9999, 10000, true)).toBe(true);
     expect(durationThrottle(10000, 10000, true)).toBe(true);
   });
 
-  it('does NOT trigger when frame is well outside 500ms window', () => {
+  it('does NOT trigger when frame is well outside 50ms window', () => {
     expect(durationThrottle(5000, 10000, true)).toBe(false);
     expect(durationThrottle(9000, 10000, true)).toBe(false);
-    expect(durationThrottle(9400, 10000, true)).toBe(false);
+    expect(durationThrottle(9900, 10000, true)).toBe(false);
   });
 
   it('does NOT trigger when not playing', () => {
-    expect(durationThrottle(9800, 10000, false)).toBe(false);
+    expect(durationThrottle(9980, 10000, false)).toBe(false);
   });
 
   it('does NOT trigger when durationMs = 0 (unknown duration)', () => {
     expect(durationThrottle(9800, 0, true)).toBe(false);
   });
 
-  it('handles short media (durationMs = 300) — all frames trigger', () => {
-    // durationMs - 500 = -200, so any frame >= -200 triggers
-    expect(durationThrottle(0, 300, true)).toBe(true);
-    expect(durationThrottle(100, 300, true)).toBe(true);
+  it('handles short media (durationMs = 300)', () => {
+    // durationMs - 50 = 250, so frames >= 250 trigger
+    expect(durationThrottle(0, 300, true)).toBe(false);
+    expect(durationThrottle(100, 300, true)).toBe(false);
+    expect(durationThrottle(250, 300, true)).toBe(true);
+    expect(durationThrottle(260, 300, true)).toBe(true);
   });
 
-  it('clamping uses 500ms offset instead of 200ms', () => {
-    expect(clampSeekMs(10000, 10000)).toBe(9500);
-    expect(clampSeekMs(12000, 10000)).toBe(9500);
+  it('clamping uses 50ms offset', () => {
+    expect(clampSeekMs(10000, 10000)).toBe(9950);
+    expect(clampSeekMs(12000, 10000)).toBe(9950);
   });
 
   it('clamping does not apply when below durationMs', () => {
@@ -141,19 +143,19 @@ describe('Issue #3 — Duration throttle widened to 500ms', () => {
     expect(clampSeekMs(5000, 10000)).toBe(5000);
   });
 
-  it('clamping edge: very short media clamps to 0', () => {
-    // durationMs = 300, 300 - 500 = -200, Math.max(0, -200) = 0
-    expect(clampSeekMs(300, 300)).toBe(0);
-    expect(clampSeekMs(500, 300)).toBe(0);
+  it('clamping edge: very short media clamps correctly', () => {
+    // durationMs = 300, 300 - 50 = 250, Math.max(0, 250) = 250
+    expect(clampSeekMs(300, 300)).toBe(250);
+    expect(clampSeekMs(500, 300)).toBe(250);
   });
 
-  it('clamping edge: durationMs exactly 500 clamps to 0', () => {
-    expect(clampSeekMs(500, 500)).toBe(0);
+  it('clamping edge: durationMs exactly 50 clamps to 0', () => {
+    expect(clampSeekMs(50, 50)).toBe(0);
   });
 
-  it('clamping edge: durationMs = 501 clamps to 1', () => {
-    expect(clampSeekMs(501, 501)).toBe(1);
-    expect(clampSeekMs(600, 501)).toBe(1);
+  it('clamping edge: durationMs = 51 clamps to 1', () => {
+    expect(clampSeekMs(51, 51)).toBe(1);
+    expect(clampSeekMs(600, 51)).toBe(1);
   });
 
   it('negative timeMs passes through unclamped', () => {
@@ -326,8 +328,8 @@ describe('Issue #3 — Full lifecycle: play -> EOS timeout -> lightweight recove
     const m = createMediaEntry(10000, { isPlaying: true });
     const durationMs = m.durationMs;
 
-    // Frame arrives at 9600ms — within new 500ms window
-    const shouldPause = durationThrottle(9600, durationMs, m.isPlaying);
+    // Frame arrives at 9960ms — within new 50ms window
+    const shouldPause = durationThrottle(9960, durationMs, m.isPlaying);
     expect(shouldPause).toBe(true);
 
     // Throttle pauses playback

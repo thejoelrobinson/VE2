@@ -102,8 +102,9 @@ self._vlcOnDecoderFrame = function(pictureId, frame) {
   _lastFrameTimestampUs = frame.timestamp;
 
   // Duration throttle: pause VLC before it reaches clip end (or media end).
-  // Clip-bounded mode uses 200ms margin (overshoot just wastes decode, no fatal EOS risk).
-  // Default mode uses 500ms margin (prevents VLC Stopping event).
+  // With cancel-main-loop.js active, EOS deadlock is prevented at the Emscripten level.
+  // Clip-bounded mode uses 0ms margin (no safety gap needed).
+  // Default mode uses 50ms margin (small buffer to avoid edge-case Stopping event).
   // NOTE: frameMs is not per-media attributed — with multiple playing media, the first
   // matching entry in Map iteration order gets paused. This is a pre-existing limitation;
   // in practice only one media plays at a time (timeline playhead drives a single clip).
@@ -112,7 +113,7 @@ self._vlcOnDecoderFrame = function(pictureId, frame) {
     const effectiveEnd = m.boundedMode
       ? Math.min(m.clipEndMs, m.durationMs)
       : m.durationMs;
-    const margin = m.boundedMode ? 200 : 500;
+    const margin = m.boundedMode ? 0 : 50;
     if (frameMs >= effectiveEnd - margin) {
       try { _module._wasm_media_player_set_pause(m.mp, 1); } catch(_) {}
       m.isPlaying = false;
@@ -188,7 +189,7 @@ self._vlcAwaitFrame = async (_pid) => new Promise(() => {});
 
 // ── EOS detection + recovery ─────────────────────────────────────────────────
 // If VLC stops delivering frames for >2000ms while playing, it hit end-of-stream.
-// The duration throttle (500ms before media end) is the primary EOS defense.
+// The duration throttle (50ms before media end) and cancel-main-loop.js are the primary EOS defenses.
 // This timeout is a secondary safety net (relaxed from 400ms to 2000ms).
 let _eosCheckTimer = null;
 let _lastFrameDeliveryMs = performance.now();
@@ -398,8 +399,8 @@ self.addEventListener('message', function(e) {
         // _wasm_* legacy API (libvlc_media_player_t*), not the frame server API
         // (frame_server_t*). Calling _fs_guard_eos(mp) would pass the wrong
         // pointer type. The _fs_* migration is planned for a future issue.
-        // EOS prevention is handled by JS-level duration throttle (500ms) and
-        // timeout detection (2000ms).
+        // EOS prevention is handled by cancel-main-loop.js (primary), JS-level
+        // duration throttle (50ms), and timeout detection (2000ms).
 
         // Mute and play to trigger demux + decode probe
         _module._wasm_audio_set_volume(mp, 0);
@@ -494,26 +495,13 @@ self.addEventListener('message', function(e) {
       // Clamp to clip bounds (if active) or media duration.
       let clampedMs = timeMs;
       if (m.boundedMode) {
-        clampedMs = Math.max(m.clipStartMs, Math.min(timeMs, m.clipEndMs - 200));
+        clampedMs = Math.max(m.clipStartMs, Math.min(timeMs, m.clipEndMs));
       } else if (m.durationMs > 0 && timeMs >= m.durationMs) {
-        clampedMs = Math.max(0, m.durationMs - 500);
+        clampedMs = Math.max(0, m.durationMs - 50);
       }
 
       // Recover from EOS if needed
       if (m.atEos) _recoverFromEos(m);
-
-      // Force recovery if VLC was paused near the media end.
-      // The duration throttle pauses VLC at durationMs-500, but VLC's internal
-      // decode pipeline can overshoot and hit the Stopping event, making the
-      // player unusable. The EOS check skips paused media (isPlaying=false),
-      // so atEos is never set. Detect this by checking lastProducedFrameMs.
-      if (!m.isPlaying && !m.atEos && m.durationMs > 0) {
-        const effectiveEnd = m.boundedMode ? Math.min(m.clipEndMs, m.durationMs) : m.durationMs;
-        if (m.lastProducedFrameMs > effectiveEnd - 1000) {
-          m.atEos = true;
-          _recoverFromEos(m);
-        }
-      }
 
       // Queue request with timeout
       const timer = setTimeout(() => {
@@ -543,8 +531,12 @@ self.addEventListener('message', function(e) {
         }
         // Otherwise: target is far behind (need backward seek) or far ahead (need forward seek)
       }
-      // Rapid-fire dedup: suppress seeks within 100ms of each other (prevents flood)
-      if (m.isPlaying && m.lastSeekTime && Date.now() - m.lastSeekTime < 100) {
+
+      // Cold-start seek protection: after a seek starts VLC, suppress re-seeks until
+      // at least one frame is produced. Prevents seek-flood that starves VLC's decoder.
+      // Once lastProducedFrameMs >= 0, position-aware dedup (above) handles all decisions.
+      // Safety valve: allow re-seek after 200ms if VLC hasn't produced any frame yet.
+      if (m.isPlaying && m.lastProducedFrameMs < 0 && m.lastSeekTime && Date.now() - m.lastSeekTime < 200) {
         break;
       }
 
@@ -561,6 +553,16 @@ self.addEventListener('message', function(e) {
       break;
     }
 
+    case 'cancel_frame': {
+      const { requestId } = msg;
+      const req = _pendingFrames.get(requestId);
+      if (req) {
+        clearTimeout(req.timer);
+        _pendingFrames.delete(requestId);
+      }
+      break;
+    }
+
     case 'set_playback': {
       const { mediaId, playing, seekMs: rawSeekMs } = msg;
       const m = _getMedia(mediaId);
@@ -569,9 +571,9 @@ self.addEventListener('message', function(e) {
       // Clamp to clip bounds (if active) or media duration.
       let seekMs = rawSeekMs;
       if (m.boundedMode) {
-        seekMs = Math.max(m.clipStartMs, Math.min(rawSeekMs, m.clipEndMs - 200));
+        seekMs = Math.max(m.clipStartMs, Math.min(rawSeekMs, m.clipEndMs));
       } else if (m.durationMs > 0 && rawSeekMs >= m.durationMs) {
-        seekMs = Math.max(0, m.durationMs - 500);
+        seekMs = Math.max(0, m.durationMs - 50);
       }
 
       if (playing) {
@@ -602,9 +604,9 @@ self.addEventListener('message', function(e) {
       // Clamp to clip bounds (if active) or media duration.
       let seekMs = rawSeekMs;
       if (m.boundedMode) {
-        seekMs = Math.max(m.clipStartMs, Math.min(rawSeekMs, m.clipEndMs - 200));
+        seekMs = Math.max(m.clipStartMs, Math.min(rawSeekMs, m.clipEndMs));
       } else if (m.durationMs > 0 && rawSeekMs >= m.durationMs) {
-        seekMs = Math.max(0, m.durationMs - 500);
+        seekMs = Math.max(0, m.durationMs - 50);
       }
 
       if (m.atEos) _recoverFromEos(m);
@@ -647,8 +649,8 @@ self.addEventListener('message', function(e) {
       if (!m) break;
       const clampedStart = Math.max(0, startMs);
       const clampedEnd = (m.durationMs > 0) ? Math.min(endMs, m.durationMs) : endMs;
-      // Reject clips shorter than the bounded margin (200ms) — they'd cause immediate throttle
-      if (clampedEnd - clampedStart < 200) break;
+      // Reject clips shorter than 50ms — too short for meaningful playback
+      if (clampedEnd - clampedStart < 50) break;
       m.clipStartMs = clampedStart;
       m.clipEndMs = clampedEnd;
       m.boundedMode = true;

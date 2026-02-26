@@ -131,7 +131,7 @@ export const projectPanel = {
   _onImportPartial(failedFiles) {
     if (!failedFiles || failedFiles.length === 0) return;
     const list = failedFiles.join('\n  • ');
-    alert(`Could not import ${failedFiles.length} file${failedFiles.length > 1 ? 's' : ''} (unsupported format):\n\n  • ${list}`);
+    alert(`Could not import ${failedFiles.length} file${failedFiles.length > 1 ? 's' : ''} (format not recognized or decode failed):\n\n  • ${list}`);
   },
 
   // --- Sequence list rendering ---

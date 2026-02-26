@@ -4,7 +4,9 @@
  * After this issue is resolved:
  * - ALL video files (.mp4, .mov, .webm, .mxf) probe through VLC first
  * - HTMLVideoElement is fallback only if VLC probe fails
- * - _mxfProbedBridges is renamed to _vlcProbedBridges
+ * - Probe bridges are released immediately after successful probe
+ *   (VLCDecoder creates its own bridge when the file is placed on timeline)
+ * - Probe bridge uses a temporary prefix (_probe_) instead of media-N
  * - Image files still use Image() path, audio files use HTMLAudioElement
  *
  * Pure-logic tests — no browser APIs, WASM, or VideoFrame needed.
@@ -63,8 +65,10 @@ function createFailingVLCBridge(mediaId) {
 
 // ── Simulated probeMedia (EXPECTED behavior after issue #2) ─────────────────
 // Key change: ALL video files probe through VLC, not just .mxf
+// Probe bridges are released immediately after success — VLCDecoder creates
+// its own bridge when the file is placed on the timeline.
 
-function createProbeMedia({ createBridge, vlcProbedBridges, mediaIdCounter }) {
+function createProbeMedia({ createBridge }) {
   return async function probeMedia(file) {
     const type = getMediaType(file.name);
     if (!type) throw new Error(`Unsupported file type: ${file.name}`);
@@ -92,12 +96,15 @@ function createProbeMedia({ createBridge, vlcProbedBridges, mediaIdCounter }) {
     }
 
     // VIDEO: probe through VLC first (all formats, not just MXF)
-    const predictedId = `media-${mediaIdCounter.value + 1}`;
-    const bridge = createBridge(predictedId);
+    // Use temporary prefix — not media-N — to avoid ID collisions
+    const probeId = `_probe_${Date.now()}`;
+    const bridge = createBridge(probeId);
     try {
       const { durationMs, width, height, fps } = await bridge.loadFile(file);
-      // Store bridge for VLCDecoder reuse (renamed from _mxfProbedBridges)
-      vlcProbedBridges.set(predictedId, bridge);
+      // Release probe bridge immediately — VLC's webcodec module uses global
+      // state, so only one active player per worker is safe. VLCDecoder will
+      // create its own bridge when the file is placed on the timeline.
+      bridge.release();
       return {
         type,
         duration: durationMs / 1000,
@@ -135,14 +142,10 @@ function mockFile(name, options = {}) {
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 describe('Issue #2 — VLC probe routing for all video formats', () => {
-  let vlcProbedBridges;
-  let mediaIdCounter;
   let probeMedia;
   let bridgesCreated;
 
   beforeEach(() => {
-    vlcProbedBridges = new Map();
-    mediaIdCounter = { value: 0 };
     bridgesCreated = [];
 
     probeMedia = createProbeMedia({
@@ -150,9 +153,7 @@ describe('Issue #2 — VLC probe routing for all video formats', () => {
         const b = createMockVLCBridge(id);
         bridgesCreated.push(b);
         return b;
-      },
-      vlcProbedBridges,
-      mediaIdCounter
+      }
     });
   });
 
@@ -197,9 +198,7 @@ describe('Issue #2 — VLC probe routing for all video formats', () => {
   describe('VLC probe fallback to HTMLVideoElement', () => {
     it('falls back to HTMLVideoElement if VLC probe throws', async () => {
       const failProbe = createProbeMedia({
-        createBridge: (id) => createFailingVLCBridge(id),
-        vlcProbedBridges,
-        mediaIdCounter
+        createBridge: (id) => createFailingVLCBridge(id)
       });
 
       const result = await failProbe(mockFile('clip.mp4'));
@@ -214,25 +213,12 @@ describe('Issue #2 — VLC probe routing for all video formats', () => {
           const b = createFailingVLCBridge(id);
           bridges.push(b);
           return b;
-        },
-        vlcProbedBridges,
-        mediaIdCounter
+        }
       });
 
       await failProbe(mockFile('broken.mp4'));
       expect(bridges.length).toBe(1);
       expect(bridges[0]._released).toBe(true);
-    });
-
-    it('does not store bridge in vlcProbedBridges on failure', async () => {
-      const failProbe = createProbeMedia({
-        createBridge: (id) => createFailingVLCBridge(id),
-        vlcProbedBridges,
-        mediaIdCounter
-      });
-
-      await failProbe(mockFile('broken.mp4'));
-      expect(vlcProbedBridges.size).toBe(0);
     });
   });
 
@@ -278,25 +264,28 @@ describe('Issue #2 — VLC probe routing for all video formats', () => {
     });
   });
 
-  describe('_vlcProbedBridges stores probed bridges for reuse', () => {
-    it('stores bridge after successful VLC probe', async () => {
+  describe('Probe bridge is released after successful probe', () => {
+    it('releases bridge on successful VLC probe', async () => {
       await probeMedia(mockFile('clip.mp4'));
-      expect(vlcProbedBridges.size).toBe(1);
-      expect(vlcProbedBridges.has('media-1')).toBe(true);
+      expect(bridgesCreated.length).toBe(1);
+      expect(bridgesCreated[0]._released).toBe(true);
     });
 
-    it('stores separate bridges for multiple files', async () => {
-      await probeMedia(mockFile('clip1.mp4'));
-      mediaIdCounter.value++;
-      await probeMedia(mockFile('clip2.mov'));
-      expect(vlcProbedBridges.size).toBe(2);
+    it('two sequential probes both succeed (multi-file import scenario)', async () => {
+      const result1 = await probeMedia(mockFile('clip1.mp4'));
+      const result2 = await probeMedia(mockFile('clip2.mov'));
+
+      expect(result1.probeMethod).toBe('vlc');
+      expect(result2.probeMethod).toBe('vlc');
+      expect(bridgesCreated.length).toBe(2);
+      // Both bridges released after probe
+      expect(bridgesCreated[0]._released).toBe(true);
+      expect(bridgesCreated[1]._released).toBe(true);
     });
 
-    it('bridge is loaded after probe', async () => {
+    it('probe bridge uses temporary prefix (not media-N)', async () => {
       await probeMedia(mockFile('clip.webm'));
-      const bridge = vlcProbedBridges.get('media-1');
-      expect(bridge._loaded).toBe(true);
-      expect(bridge._released).toBe(false);
+      expect(bridgesCreated[0]._mediaId).toMatch(/^_probe_/);
     });
   });
 
@@ -349,14 +338,11 @@ describe('Issue #2 — VLC probe routing for all video formats', () => {
         createBridge: (id) => {
           const b = createMockVLCBridge(id);
           return b;
-        },
-        vlcProbedBridges,
-        mediaIdCounter
+        }
       });
 
       // Probe various video formats — none should trigger audio extraction
       for (const name of ['clip.mp4', 'clip.mov', 'clip.webm', 'clip.mxf', 'clip.avi']) {
-        mediaIdCounter.value++;
         await probeWithAudioTracking(mockFile(name));
       }
       // No audio extraction calls should have been made
@@ -364,26 +350,24 @@ describe('Issue #2 — VLC probe routing for all video formats', () => {
     });
   });
 
-  describe('Rename: _mxfProbedBridges to _vlcProbedBridges', () => {
-    it('uses vlcProbedBridges (not mxfProbedBridges) for storage', async () => {
-      // The test verifies the new naming convention is in use.
-      // vlcProbedBridges is the Map passed to createProbeMedia.
+  describe('Bridge storage removed — no _vlcProbedBridges or _mxfProbedBridges', () => {
+    it('probe does not store bridges — they are released immediately', async () => {
       await probeMedia(mockFile('clip.mp4'));
-      expect(vlcProbedBridges.size).toBe(1);
-      // Old name would be _mxfProbedBridges — that should no longer exist
+      await probeMedia(mockFile('clip.webm'));
+
+      // All bridges released, none retained
+      expect(bridgesCreated.length).toBe(2);
+      expect(bridgesCreated.every(b => b._released)).toBe(true);
     });
 
-    it('vlcProbedBridges stores non-MXF formats too', async () => {
-      await probeMedia(mockFile('clip.mp4'));
-      expect(vlcProbedBridges.has('media-1')).toBe(true);
+    it('probe works for non-MXF formats without bridge storage', async () => {
+      const r1 = await probeMedia(mockFile('clip.mp4'));
+      const r2 = await probeMedia(mockFile('clip.webm'));
+      const r3 = await probeMedia(mockFile('clip.avi'));
 
-      mediaIdCounter.value++;
-      await probeMedia(mockFile('clip.webm'));
-      expect(vlcProbedBridges.has('media-2')).toBe(true);
-
-      // Verify both are non-MXF and still stored
-      const keys = [...vlcProbedBridges.keys()];
-      expect(keys).toEqual(['media-1', 'media-2']);
+      expect(r1.probeMethod).toBe('vlc');
+      expect(r2.probeMethod).toBe('vlc');
+      expect(r3.probeMethod).toBe('vlc');
     });
   });
 });

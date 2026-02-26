@@ -223,25 +223,25 @@ export const programMonitor = {
 
   async _processRender(frame) {
     this._rendering = true;
-    this._pendingFrame = null;
 
-    try {
-      await this._renderFrame(frame);
-    } catch (e) {
-      logger.warn('ProgramMonitor render error:', e);
+    let currentFrame = frame;
+    while (true) {
+      this._pendingFrame = null;
+      try {
+        await this._renderFrame(currentFrame);
+      } catch (e) {
+        logger.warn('[ProgramMonitor] Render error:', e);
+      }
+
+      if (this._pendingFrame !== null) {
+        currentFrame = this._pendingFrame;
+        // loop again with the latest pending frame
+      } else {
+        break;
+      }
     }
 
     this._rendering = false;
-
-    if (this._pendingFrame !== null) {
-      const next = this._pendingFrame;
-      this._pendingFrame = null;
-      try {
-        await this._processRender(next);
-      } catch (err) {
-        logger.warn('[ProgramMonitor] Deferred render failed:', err);
-      }
-    }
   },
 
   async _renderFrame(frame) {

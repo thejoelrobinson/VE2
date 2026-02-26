@@ -12,6 +12,7 @@ import {
   clipContainsFrame,
   getSourceFrameAtPlayhead,
 } from '../timeline/Clip.js';
+import { VLC_CONFIG } from '../media/VLCBridge.js';
 import logger from '../../utils/logger.js';
 
 // Lazy import — breaks the MediaDecoder → RenderAheadManager → MediaDecoder
@@ -45,6 +46,9 @@ export const sequenceStreamController = {
 
   /** Unsubscribe callbacks from eventBus.on() */
   _unsubs: null,
+
+  /** Set<string> — clip keys currently undergoing burst-decode */
+  _preCachingKeys: new Set(),
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -177,36 +181,28 @@ export const sequenceStreamController = {
     for (const entry of schedule) {
       const key = `${entry.trackId}_${entry.clipId}`;
 
-      let bridge = null;
+      let session = null;
       if (!assignedMediaIds.has(entry.mediaId)) {
         assignedMediaIds.add(entry.mediaId);
-        bridge = await this._getBridge(entry.mediaId);
+        session = await this._getSession(entry.mediaId);
       }
-      // bridge === null means: same mediaId used by an earlier clip — let
+      // session === null means: same mediaId used by an earlier clip — let
       // RenderAheadManager handle frame-by-frame decode for this clip.
 
-      // A seek or stop arrived while we were awaiting the bridge — abort.
+      // A seek or stop arrived while we were awaiting the session — abort.
       if (this._generation !== gen) return;
 
       const streamEntry = {
         mediaId: entry.mediaId,
-        bridge,
+        session,
         clipId: entry.clipId,
         trackId: entry.trackId,
-        // `activated` tracks whether setPlaybackActive(true) has been issued so
-        // advancePlayback() does not re-issue it on subsequent ticks and
-        // continuously reset VLC's decode position.
-        activated: false,
       };
       this._activeStreams.set(key, streamEntry);
 
-      if (!bridge) continue;
+      if (!session) continue;
 
-      // Set clip bounds on the VLC stream
-      bridge.setClipBounds(entry.sourceStartMs, entry.sourceEndMs);
-
-      // Register clip-end callback so we know when VLC finishes this segment
-      bridge.setClipEndCallback((frameMs, clipEndMs) => {
+      session.configure(entry.sourceStartMs, entry.sourceEndMs, (frameMs, clipEndMs) => {
         this.onClipEndReached(entry.trackId, entry.clipId, frameMs, clipEndMs);
       });
 
@@ -214,8 +210,7 @@ export const sequenceStreamController = {
         // Compute per-clip source time at the playhead
         const sourceFrame = getSourceFrameAtPlayhead(entry.clip, startFrame);
         const sourceTimeSeconds = sourceFrame != null ? sourceFrame / fps : entry.sourceStartMs / 1000;
-        bridge.setPlaybackActive(true, sourceTimeSeconds);
-        streamEntry.activated = true;
+        session.start(sourceTimeSeconds);
       }
       // Pre-roll only — bounds set, but not started yet
     }
@@ -245,10 +240,7 @@ export const sequenceStreamController = {
     }
     for (const key of staleKeys) {
       const stream = this._activeStreams.get(key);
-      if (stream?.bridge) {
-        stream.bridge.setPlaybackActive(false, 0);
-        stream.bridge.clearClipBounds();
-      }
+      stream.session?.stop();
       this._activeStreams.delete(key);
     }
 
@@ -262,48 +254,74 @@ export const sequenceStreamController = {
       if (this._activeStreams.has(key)) {
         const stream = this._activeStreams.get(key);
         // Promote a pre-rolled clip to active when the playhead enters it.
-        // Skip if already activated — calling setPlaybackActive again would
-        // reset VLC's decode position and cause seek-flood every 5 frames.
-        if (entry.isActive && stream.bridge && !stream.activated) {
+        // Skip if already active — session.start() is idempotent but we
+        // avoid unnecessary calls to prevent seek-flood every 5 frames.
+        if (entry.isActive && stream.session && !stream.session.isActive) {
           const sourceFrame = getSourceFrameAtPlayhead(entry.clip, currentFrame);
           const sourceTimeSeconds = sourceFrame != null ? sourceFrame / fps : entry.sourceStartMs / 1000;
-          stream.bridge.setPlaybackActive(true, sourceTimeSeconds);
-          stream.activated = true;
+          stream.session.start(sourceTimeSeconds);
         }
         continue;
       }
 
       // New clip entering the window
-      let bridge = null;
+      let session = null;
       if (!assignedMediaIds.has(entry.mediaId)) {
         assignedMediaIds.add(entry.mediaId);
-        bridge = await this._getBridge(entry.mediaId);
+        session = await this._getSession(entry.mediaId);
       }
 
-      // A seek or stop arrived while we were awaiting the bridge — abort.
+      // A seek or stop arrived while we were awaiting the session — abort.
       if (this._generation !== gen) return;
 
       const streamEntry = {
         mediaId: entry.mediaId,
-        bridge,
+        session,
         clipId: entry.clipId,
         trackId: entry.trackId,
-        activated: false,
       };
       this._activeStreams.set(key, streamEntry);
 
-      if (!bridge) continue;
+      if (!session) continue;
 
-      bridge.setClipBounds(entry.sourceStartMs, entry.sourceEndMs);
-      bridge.setClipEndCallback((frameMs, clipEndMs) => {
+      session.configure(entry.sourceStartMs, entry.sourceEndMs, (frameMs, clipEndMs) => {
         this.onClipEndReached(entry.trackId, entry.clipId, frameMs, clipEndMs);
       });
 
       if (entry.isActive) {
         const sourceFrame = getSourceFrameAtPlayhead(entry.clip, currentFrame);
         const sourceTimeSeconds = sourceFrame != null ? sourceFrame / fps : entry.sourceStartMs / 1000;
-        bridge.setPlaybackActive(true, sourceTimeSeconds);
-        streamEntry.activated = true;
+        session.start(sourceTimeSeconds);
+      }
+    }
+
+    // Edit-point pre-cache: burst-decode first 500ms of pre-roll clips within 30 frames
+    const PRE_CACHE_TRIGGER_FRAMES = VLC_CONFIG.PRE_CACHE_TRIGGER_FRAMES;
+    const PRE_CACHE_SAMPLE_COUNT = VLC_CONFIG.PRE_CACHE_SAMPLE_COUNT;
+
+    const ram = await this._getRenderAheadManager();
+    if (ram && this._generation === gen) {
+      for (const entry of schedule) {
+        if (!entry.needsPreroll) continue;
+        if (entry.clip.startFrame - currentFrame > PRE_CACHE_TRIGGER_FRAMES) continue;
+
+        const key = `${entry.trackId}_${entry.clipId}`;
+        if (this._activeStreams.has(key)) continue; // already a real stream
+        if (this._preCachingKeys.has(key)) continue; // burst already in-flight
+
+        // Check if first PRE_CACHE_SAMPLE_COUNT frames are already cached
+        let cachedCount = 0;
+        for (let i = 0; i < PRE_CACHE_SAMPLE_COUNT; i++) {
+          const sf = getSourceFrameAtPlayhead(entry.clip, entry.clip.startFrame + i);
+          if (sf == null) continue;
+          const ms = Math.round((sf / fps) * 1000);
+          if (ram._decodedSources.has(`${entry.mediaId}_${ms}`)) cachedCount++;
+        }
+        if (cachedCount >= PRE_CACHE_SAMPLE_COUNT) continue; // already warm
+
+        // Fire-and-forget burst; guard with preCachingKeys to prevent duplicates
+        this._preCachingKeys.add(key);
+        this._burstDecode(entry, gen).finally(() => this._preCachingKeys.delete(key));
       }
     }
   },
@@ -321,10 +339,7 @@ export const sequenceStreamController = {
     const stream = this._activeStreams.get(key);
     if (!stream) return;
 
-    if (stream.bridge) {
-      stream.bridge.setPlaybackActive(false, 0);
-      stream.bridge.clearClipBounds();
-    }
+    try { stream.session?.stop(); } catch(_) {}
     this._activeStreams.delete(key);
     logger.info(`[SSC] Clip end reached: ${key}`);
   },
@@ -332,12 +347,7 @@ export const sequenceStreamController = {
   /** Stop all streams and clear the active map. */
   stopPlayback() {
     for (const [, stream] of this._activeStreams) {
-      if (stream.bridge) {
-        try {
-          stream.bridge.setPlaybackActive(false, 0);
-          stream.bridge.clearClipBounds();
-        } catch(_) {}
-      }
+      try { stream.session?.stop(); } catch(_) {}
     }
     this._activeStreams.clear();
   },
@@ -367,31 +377,30 @@ export const sequenceStreamController = {
     for (const entry of schedule) {
       if (!entry.isActive) continue;
 
-      let bridge = null;
+      let session = null;
       if (!assignedMediaIds.has(entry.mediaId)) {
         assignedMediaIds.add(entry.mediaId);
-        bridge = await this._getBridge(entry.mediaId);
+        session = await this._getSession(entry.mediaId);
       }
 
-      // A newer seek arrived while we were awaiting the bridge — abort.
+      // A newer seek arrived while we were awaiting the session — abort.
       if (this._generation !== gen) return;
 
-      if (!bridge) continue;
+      if (!session) continue;
 
       const key = `${entry.trackId}_${entry.clipId}`;
       this._activeStreams.set(key, {
         mediaId: entry.mediaId,
-        bridge,
+        session,
         clipId: entry.clipId,
         trackId: entry.trackId,
-        activated: false,
       });
 
-      bridge.setClipBounds(entry.sourceStartMs, entry.sourceEndMs);
+      session.configure(entry.sourceStartMs, entry.sourceEndMs, null);
 
       const sourceFrame = getSourceFrameAtPlayhead(entry.clip, frame);
       const sourceTimeSeconds = sourceFrame != null ? sourceFrame / fps : entry.sourceStartMs / 1000;
-      bridge.syncSeek(sourceTimeSeconds);
+      session.seek(sourceTimeSeconds);
     }
   },
 
@@ -401,17 +410,13 @@ export const sequenceStreamController = {
   _teardownAll() {
     // Increment the generation counter so any suspended async methods
     // (startPlayback, advancePlayback, seekPlayback) that are awaiting a
-    // bridge resolution will abort when they resume and compare generations.
+    // session resolution will abort when they resume and compare generations.
     this._generation++;
     for (const [, stream] of this._activeStreams) {
-      if (stream.bridge) {
-        try {
-          stream.bridge.setPlaybackActive(false, 0);
-          stream.bridge.clearClipBounds();
-        } catch(_) {}
-      }
+      try { stream.session?.stop(); } catch(_) {}
     }
     this._activeStreams.clear();
+    this._preCachingKeys.clear();
   },
 
   /**
@@ -421,13 +426,42 @@ export const sequenceStreamController = {
    * @param {string} mediaId
    * @returns {Promise<object|null>}
    */
-  async _getBridge(mediaId) {
+  async _getSession(mediaId) {
     try {
       const md = await _getMediaDecoder();
-      return md.getVLCBridge(mediaId);
+      return md.getStreamSession(mediaId);
     } catch(_) {
       return null;
     }
+  },
+  // Lazy import to avoid circular dependency — RenderAheadManager is only needed
+  // for edit-point pre-cache sampling.
+  async _getRenderAheadManager() {
+    try {
+      const { renderAheadManager } = await import('../media/RenderAheadManager.js');
+      return renderAheadManager;
+    } catch (_) {
+      return null;
+    }
+  },
+
+  // Burst-decode the first 500ms of a clip range for edit-point pre-cache.
+  // Fire-and-forget from advancePlayback — isolated so it doesn't block the main loop.
+  async _burstDecode(entry, gen) {
+    const session = await this._getSession(entry.mediaId);
+    if (this._generation !== gen || !session) return;
+
+    const key = `${entry.trackId}_${entry.clipId}`;
+    if (this._activeStreams.has(key)) return;
+
+    const burstEnd = Math.min(
+      entry.sourceStartMs + VLC_CONFIG.PRE_CACHE_BURST_MS,
+      entry.sourceEndMs
+    );
+    await session.burstDecode(entry.sourceStartMs, burstEnd);
+
+    if (this._generation !== gen) return;
+    // burstDecode() already cleaned up
   },
 };
 

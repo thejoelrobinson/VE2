@@ -13,6 +13,23 @@
 import logger from '../../utils/logger.js';
 import { opfsCache } from '../core/OPFSCache.js';
 
+export const VLC_CONFIG = {
+  // Threading / concurrency
+  MAX_CONCURRENT_DECODES: 1,
+  // Sequential (export) mode
+  SEQUENTIAL_START_DELAY_MS: 80,
+  SEQUENTIAL_RATE: 1.5,
+  // Idle-fill tuning
+  IDLE_FILL_FRAMES_PER_TICK: 4,
+  IDLE_FILL_BASE_DELAY_MS: 200,
+  IDLE_FILL_BACKOFF_DELAY_MS: 2000,
+  // Edit-point pre-cache / burst
+  PRE_CACHE_TRIGGER_FRAMES: 30,
+  PRE_CACHE_SAMPLE_COUNT: 15,
+  PRE_CACHE_BURST_MS: 500,
+  PRE_CACHE_BURST_TIMEOUT_MARGIN_MS: 200,
+};
+
 const OPFS_NS = 'vlc-frames';
 const OPFS_JPEG_QUALITY = 0.85;
 const FRAME_CACHE_MAX = 90;
@@ -98,6 +115,7 @@ export function createVLCBridge(mediaId) {
   let _onClipEnd = null;
   let _onBroadcastFrame = null;
   let _opfsWriteCounter = 0;
+  let _pendingFrameReqId = null; // reqId of the current in-flight L3 frame request, or null
   let _probeResolve = null;
   let _probeReject = null;
 
@@ -220,10 +238,18 @@ export function createVLCBridge(mediaId) {
         }
         break;
 
-      case 'frame':
+      case 'frame': {
+        const pending = _allPendingRequests.get(msg.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          _allPendingRequests.delete(msg.requestId);
+        }
+        // Always cache the decoded frame — even if the request was cancelled/timed out,
+        // the VLC decode already happened so the bitmap is free to keep.
         if (msg.bitmap) {
           _cacheFrame(msg.frameMs, msg.bitmap);
           if (_onBroadcastFrame) try { _onBroadcastFrame(msg.frameMs, msg.bitmap); } catch(_) {}
+          // NOTE: _cacheFrame already calls _onFrameCached — do NOT call it again here
           _opfsWriteCounter++;
           if (_opfsWriteCounter >= OPFS_WRITE_INTERVAL) {
             _opfsWriteCounter = 0;
@@ -231,7 +257,11 @@ export function createVLCBridge(mediaId) {
             if (bmp) _writeFrameToOPFS(msg.frameMs, bmp);
           }
         }
+        if (pending) {
+          pending.resolve({ frameMs: msg.frameMs, bitmap: msg.bitmap });
+        }
         break;
+      }
 
       case 'frame_cached':
         if (_onFrameCached) try { _onFrameCached(msg.frameMs); } catch(_) {}
@@ -331,16 +361,38 @@ export function createVLCBridge(mediaId) {
 
     // L3: Worker frame server
     if (!_sharedWorker) return null;
-    return new Promise(resolve => {
+
+    // Last-one-wins: if there's already a pending L3 request for this bridge,
+    // cancel it immediately. VLC is single-threaded — stale requests just queue up
+    // and block the latest seek from being processed promptly.
+    if (_pendingFrameReqId !== null) {
+      const staleReqId = _pendingFrameReqId;
+      const stale = _allPendingRequests.get(staleReqId);
+      if (stale) {
+        clearTimeout(stale.timer);
+        _allPendingRequests.delete(staleReqId);
+        stale.resolve(null);
+      }
+      // Tell worker to flush stale pending frame — prevents it from consuming
+      // frame matches that should go to the latest request.
+      _sharedWorker.postMessage({ type: 'cancel_frame', requestId: staleReqId, mediaId: _mediaId });
+      _pendingFrameReqId = null;
+    }
+
+    const l3Result = await new Promise(resolve => {
       const reqId = ++_requestId;
+      _pendingFrameReqId = reqId;
+
       const timer = setTimeout(() => {
         _allPendingRequests.delete(reqId);
+        if (_pendingFrameReqId === reqId) _pendingFrameReqId = null;
         logger.warn(`[VLCBridge:${_mediaId}] frame timeout at ${timeSeconds.toFixed(3)}s`);
         resolve(null);
       }, CAPTURE_TIMEOUT_MS);
 
       _allPendingRequests.set(reqId, {
         resolve: (result) => {
+          if (_pendingFrameReqId === reqId) _pendingFrameReqId = null;
           if (result && result.bitmap) {
             _cacheFrame(result.frameMs, result.bitmap);
             resolve(result.bitmap);
@@ -356,6 +408,13 @@ export function createVLCBridge(mediaId) {
         timeMs: targetMs, toleranceMs: tolerance
       });
     });
+
+    if (l3Result) return l3Result;
+
+    // Best-effort fallback: show nearest cached frame instead of black.
+    // Uses a very wide tolerance — a slightly wrong frame is always better
+    // than a black frame during scrubbing.
+    return _findInCache(targetMs, _durationMs || 30000);
   }
 
   function setPlaybackActive(playing, timeSeconds) {
@@ -374,12 +433,13 @@ export function createVLCBridge(mediaId) {
     });
   }
 
-  function startSequentialMode(startSeconds) {
+  async function startSequentialMode(startSeconds) {
     if (!_sharedWorker) return;
     _sharedWorker.postMessage({
       type: 'start_sequential', mediaId: _mediaId,
-      startMs: Math.round(startSeconds * 1000), rate: 1.5
+      startMs: Math.round(startSeconds * 1000), rate: VLC_CONFIG.SEQUENTIAL_RATE
     });
+    await new Promise(r => setTimeout(r, VLC_CONFIG.SEQUENTIAL_START_DELAY_MS));
   }
 
   function endSequentialMode() {
@@ -415,14 +475,12 @@ export function createVLCBridge(mediaId) {
   async function getFramesBatch(timesArray) {
     const results = new Map();
     if (!timesArray || timesArray.length === 0) return results;
-
-    const promises = timesArray.map(async (timeSeconds) => {
+    // Sequential — VLC WASM is single-threaded; concurrent requests would just cancel
+    // each other via last-one-wins and produce no benefit over sequential access.
+    for (const timeSeconds of timesArray) {
       const bmp = await getFrameAt(timeSeconds);
-      if (bmp) {
-        results.set(Math.round(timeSeconds * 1000), bmp);
-      }
-    });
-    await Promise.all(promises);
+      if (bmp) results.set(Math.round(timeSeconds * 1000), bmp);
+    }
     return results;
   }
 

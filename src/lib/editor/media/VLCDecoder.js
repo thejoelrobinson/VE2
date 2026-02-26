@@ -1,6 +1,7 @@
 // VLC-based decoder — one VLCBridge instance per mediaId.
 // Unified decode interface consumed by MediaDecoder.
 import { createVLCBridge } from './VLCBridge.js';
+import { createVLCStreamSession } from './VLCStreamSession.js';
 import { mediaManager } from './MediaManager.js';
 import logger from '../../utils/logger.js';
 
@@ -10,6 +11,7 @@ export function createVLCDecoder() {
   let _healthy = true;
   let _initialized = false;
   let _bridge = null;
+  let _session = null;
 
   return {
     async init(mediaId, file) {
@@ -17,12 +19,13 @@ export function createVLCDecoder() {
       _file = file;
 
       // Check if MediaManager already probed this file and has a bridge ready.
-      // Reuse it instead of creating a second VLC media player (VLC's webcodec
-      // module uses global state — only one active player per worker is safe).
+      // Reuse it instead of creating a second VLC media player — VLC WASM
+      // can't handle rapid release+recreate for the same file.
       const probedBridges = mediaManager._vlcProbedBridges;
       if (probedBridges && probedBridges.has(mediaId)) {
         _bridge = probedBridges.get(mediaId);
         probedBridges.delete(mediaId);
+        _session = createVLCStreamSession(_bridge);
         _initialized = true;
         logger.info(`[VLCDecoder] Reusing probed bridge for ${file.name}`);
         return;
@@ -32,6 +35,7 @@ export function createVLCDecoder() {
       _bridge = createVLCBridge(mediaId);
       try {
         await _bridge.loadFile(file);
+        _session = createVLCStreamSession(_bridge);
         _initialized = true;
         logger.info(`[VLCDecoder] Ready for ${file.name}`);
       } catch (err) {
@@ -62,8 +66,8 @@ export function createVLCDecoder() {
       }
     },
 
-    startSequentialMode() {
-      // Actual start happens in MediaDecoder._startVLCSequential
+    async startSequentialMode(startSeconds) {
+      if (_bridge) await _bridge.startSequentialMode(startSeconds);
     },
 
     endSequentialMode() {
@@ -75,6 +79,8 @@ export function createVLCDecoder() {
       return _bridge;
     },
 
+    getSession() { return _session; },
+
     isHealthy() {
       return _healthy && _initialized;
     },
@@ -85,6 +91,7 @@ export function createVLCDecoder() {
       _healthy = false;
       _initialized = false;
       if (_bridge) { _bridge.release(); _bridge = null; }
+      _session = null;
       _file = null;
     }
   };

@@ -37,10 +37,9 @@ export const mediaDecoder = {
     this._mediaFiles.delete(mediaId);
   },
 
-  // Return the VLCBridge instance for a given mediaId, or null if not yet initialized.
-  getVLCBridge(mediaId) {
+  getStreamSession(mediaId) {
     const dec = this._vlcDecoders.get(mediaId);
-    return dec?.getBridge?.() || null;
+    return dec?.getSession?.() || null;
   },
 
   _shouldTryVLC(mediaId) {
@@ -111,10 +110,7 @@ export const mediaDecoder = {
       if (!this._vlcSeqStarted) {
         this._vlcSeqStarted = true;
         const bridge = dec.getBridge?.();
-        if (bridge) {
-          bridge.startSequentialMode(timeSeconds);
-          await new Promise(r => setTimeout(r, 80));
-        }
+        if (bridge) await bridge.startSequentialMode(timeSeconds);
       }
       return await dec.getSequentialImageBitmap(timeSeconds);
     }

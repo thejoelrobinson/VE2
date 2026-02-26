@@ -34,7 +34,8 @@ function probeMedia(file) {
       const probeBridge = createVLCBridge(predictedId);
       probeBridge.loadFile(file)
         .then(({ durationMs, width, height, fps }) => {
-          // Store the bridge for VLCDecoder to pick up later
+          // Store the bridge for VLCDecoder to pick up later (avoids creating
+          // a second VLC media player for the same file, which hangs in WASM).
           if (!mediaManager._vlcProbedBridges) mediaManager._vlcProbedBridges = new Map();
           mediaManager._vlcProbedBridges.set(predictedId, probeBridge);
           const url = URL.createObjectURL(file);

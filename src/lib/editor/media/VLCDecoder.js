@@ -18,9 +18,8 @@ export function createVLCDecoder() {
       _mediaId = mediaId;
       _file = file;
 
-      // Check if MediaManager already probed this file and has a bridge ready.
-      // Reuse it instead of creating a second VLC media player — VLC WASM
-      // can't handle rapid release+recreate for the same file.
+      // Reuse the probe bridge if available — avoids _fs_create/_fs_destroy
+      // cycles which hang the shared libvlc instance in WASM.
       const probedBridges = mediaManager._vlcProbedBridges;
       if (probedBridges && probedBridges.has(mediaId)) {
         _bridge = probedBridges.get(mediaId);

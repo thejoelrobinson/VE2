@@ -1,11 +1,14 @@
 /**
  * VLCWorker.js — Frame server worker for VLC.js WASM.
  *
- * Uses the frame server C API (fs_create/fs_open/fs_seek/fs_play/fs_pause)
- * with --vout=dummy — no GL, no canvas, no DOM dependency.
+ * Uses the frame server C API (fs_init_shared/fs_create/fs_open/fs_seek/
+ * fs_play/fs_pause/fs_shutdown) with --vout=dummy — no GL, no canvas,
+ * no DOM dependency.
  *
- * Supports multiple media files simultaneously via a Map of handles.
- * Each handle has its own VLC instance + media player + decode pipeline.
+ * A single shared libvlc_instance_t is created once during init via
+ * fs_init_shared(). All subsequent fs_create() calls produce media_player_t
+ * handles that reuse the shared instance — avoiding pthread exhaustion when
+ * importing multiple files under WASM's 8-pthread limit.
  *
  * Frame pixel data flows through the existing JS pipeline:
  *   webcodec.cpp boundOutputCb → _vlcOnDecoderFrame → createImageBitmap
@@ -46,7 +49,8 @@ self._vlcIsPlaying = false;
 self._vlcStateCache = { position: 0, timeMs: 0, lengthMs: 0, volume: 0, muted: false };
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const VLC_INIT_OPTIONS = '--codec=webcodec --aout=emworklet --avcodec-threads=1 --no-audio';
+// VLC options passed to _fs_init_shared (shared libvlc instance, created once)
+const FS_CREATE_ARGS = ['vlc', '--codec=webcodec', '--aout=emworklet', '--avcodec-threads=1', '--no-audio'];
 const CAPTURE_TIMEOUT_MS = 8000;
 const SEEK_LEAD_MS = 600;
 const FPS_STABILIZE_FRAMES = 8;
@@ -57,7 +61,7 @@ const LRU_SOFT_LIMIT = 8;
 let _module = null;
 
 // Per-media state: one entry per loaded file
-const _media = new Map(); // mediaId → { mp, file, slot, fps, durationMs, ... }
+const _media = new Map(); // mediaId → { fsHandle, file, slot, fps, durationMs, ... }
 
 // vlc_access_file slot allocator: each loaded file gets a unique slot number
 // so multiple media players can coexist without overwriting each other's File.
@@ -74,6 +78,10 @@ let _globalFps = 24;
 // Reusable canvas for frame capture
 let _captureCanvas = null;
 let _captureCtx = null;
+
+// Track which media was last actively played — used to detect clip switches
+// and re-open the file to reset VLC's decode pipeline.
+let _lastActiveMediaId = null;
 
 // Frame gate
 let _frameGateBusy = false;
@@ -102,9 +110,8 @@ self._vlcOnDecoderFrame = function(pictureId, frame) {
   _lastFrameTimestampUs = frame.timestamp;
 
   // Duration throttle: pause VLC before it reaches clip end (or media end).
-  // With cancel-main-loop.js active, EOS deadlock is prevented at the Emscripten level.
-  // Clip-bounded mode uses 0ms margin (no safety gap needed).
-  // Default mode uses 50ms margin (small buffer to avoid edge-case Stopping event).
+  // With _fs_guard_eos active at the C level, EOS deadlock is prevented.
+  // No JS safety margin needed — the C-level guard handles EOS gracefully.
   // NOTE: frameMs is not per-media attributed — with multiple playing media, the first
   // matching entry in Map iteration order gets paused. This is a pre-existing limitation;
   // in practice only one media plays at a time (timeline playhead drives a single clip).
@@ -113,9 +120,9 @@ self._vlcOnDecoderFrame = function(pictureId, frame) {
     const effectiveEnd = m.boundedMode
       ? Math.min(m.clipEndMs, m.durationMs)
       : m.durationMs;
-    const margin = m.boundedMode ? 0 : 50;
+    const margin = 0; // _fs_guard_eos handles EOS at C level; no JS safety margin needed
     if (frameMs >= effectiveEnd - margin) {
-      try { _module._wasm_media_player_set_pause(m.mp, 1); } catch(_) {}
+      try { _module._fs_pause(m.fsHandle); } catch(_) {}
       m.isPlaying = false;
       if (m.boundedMode && effectiveEnd < m.durationMs) {
         self.postMessage({ type: 'clip_end_reached', mediaId: id, frameMs, clipEndMs: m.clipEndMs });
@@ -188,15 +195,15 @@ self._vlcOnDecoderFrame = function(pictureId, frame) {
 self._vlcAwaitFrame = async (_pid) => new Promise(() => {});
 
 // ── EOS detection + recovery ─────────────────────────────────────────────────
-// If VLC stops delivering frames for >2000ms while playing, it hit end-of-stream.
-// The duration throttle (50ms before media end) and cancel-main-loop.js are the primary EOS defenses.
-// This timeout is a secondary safety net (relaxed from 400ms to 2000ms).
+// If VLC stops delivering frames for >5000ms while playing, it hit end-of-stream.
+// With _fs_guard_eos active at the C level, EOS is handled by seeking to 0 + pausing.
+// This timeout is a last-resort fallback safety net.
 let _eosCheckTimer = null;
 let _lastFrameDeliveryMs = performance.now();
 
 function _startEosCheck() {
   clearTimeout(_eosCheckTimer);
-  _eosCheckTimer = setTimeout(_checkEos, 2000);
+  _eosCheckTimer = setTimeout(_checkEos, 5000);
 }
 
 function _checkEos() {
@@ -206,7 +213,7 @@ function _checkEos() {
   for (const [id, m] of _media) {
     if (!m.isPlaying) continue;
     anyPlaying = true;
-    if (since > 2000) {
+    if (since > 5000) {
       // This media hit EOS
       m.isPlaying = false;
       m.atEos = true;
@@ -220,40 +227,22 @@ function _checkEos() {
       }
     }
   }
-  if (anyPlaying) _eosCheckTimer = setTimeout(_checkEos, 2000);
+  if (anyPlaying) _eosCheckTimer = setTimeout(_checkEos, 5000);
 }
 
-// Heavy EOS recovery: stop and re-open media on the same player to reset VLC's
-// internal state. The lightweight recovery (just clearing atEos) assumed _fs_guard_eos
-// would keep VLC alive, but that C API is NOT active (wrong pointer type).
-// When VLC genuinely hits an internal error or EOS, the player becomes unusable
-// and needs stop+reopen.
+// Lightweight EOS recovery: with _fs_guard_eos active, the C-level handler
+// already sought to 0 and paused when EOS was hit. Just clear JS-side flags
+// so get_frame can retry with a fresh seek.
 function _recoverFromEos(m) {
-  if (!m.atEos || !m.mp || !m.file || !_module) return;
-  try {
-    // Stop and re-open media on the same player to reset VLC's internal state
-    _module._wasm_media_player_stop_async(m.mp);
-    const pathPtr = _module.allocateUTF8(`emjsfile://${m.slot}`);
-    const media = _module._wasm_media_new_location(pathPtr);
-    _module._free(pathPtr);
-    if (media) {
-      _module._wasm_media_player_set_media(m.mp, media);
-      _module._wasm_media_release(media);
-      _module._wasm_audio_set_volume(m.mp, 0);
-    }
-    m.atEos = false;
-    m.isPlaying = false;
-    m.lastProducedFrameMs = -1;
-    // Clear seek throttle so the next get_frame can seek freely
-    if (m._seekThrottleTimer) {
-      clearTimeout(m._seekThrottleTimer);
-      m._seekThrottleTimer = null;
-    }
-    m._pendingSeekTarget = undefined;
-  } catch(_) {
-    // If recovery fails, at least clear the flag so get_frame can retry
-    m.atEos = false;
+  if (!m.atEos || !m.fsHandle || !_module) return;
+  m.atEos = false;
+  m.isPlaying = false;
+  m.lastProducedFrameMs = -1;
+  if (m._seekThrottleTimer) {
+    clearTimeout(m._seekThrottleTimer);
+    m._seekThrottleTimer = null;
   }
+  m._pendingSeekTarget = undefined;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -262,8 +251,8 @@ function _doSeek(m, seekTarget) {
   m.lastSeekMs = seekTarget;
   m.lastSeekTime = Date.now();
   m.lastProducedFrameMs = -1;
-  _module._wasm_media_player_set_time(m.mp, BigInt(seekTarget), 1);
-  if (m.isPlaying) _module._wasm_media_player_play(m.mp);
+  _module._fs_seek(m.fsHandle, BigInt(seekTarget), 1);
+  if (m.isPlaying) _module._fs_play(m.fsHandle);
 }
 
 function _frameTolerance() {
@@ -291,8 +280,7 @@ function _evictIfNeeded() {
   if (oldest) {
     const m = _media.get(oldest);
     if (m._seekThrottleTimer) { clearTimeout(m._seekThrottleTimer); m._seekThrottleTimer = null; }
-    try { _module._wasm_media_player_set_pause(m.mp, 1); } catch(_) {}
-    try { _module._wasm_media_player_release(m.mp); } catch(_) {}
+    try { _module._fs_destroy(m.fsHandle); } catch(_) {}
     // Flush pending requests for evicted media
     for (const [reqId, req] of _pendingFrames) {
       if (req.mediaId === oldest) {
@@ -304,6 +292,49 @@ function _evictIfNeeded() {
     _media.delete(oldest);
     self.postMessage({ type: 'media_evicted', mediaId: oldest });
   }
+}
+
+/**
+ * Re-open the media file to reset VLC's decode pipeline after a clip switch.
+ * VLC's webcodec decoder becomes stale when a different media player was active.
+ * _fs_open does stop + re-open internally, resetting demux + decoder state.
+ */
+function _reactivateMedia(m) {
+  const pathPtr = _module.allocateUTF8(`emjsfile://${m.slot}`);
+  _module._fs_open(m.fsHandle, pathPtr);
+  _module._free(pathPtr);
+  _module._fs_set_volume(m.fsHandle, 0);
+}
+
+/**
+ * Ensure only one media instance is actively decoding at a time.
+ * VLC's webcodec module delivers frames through a global callback — if multiple
+ * _fs_create instances decode simultaneously, frames interleave and requests
+ * for the target media time out.
+ */
+function _exclusivePlay(activeMediaId) {
+  for (const [id, m] of _media) {
+    if (id === activeMediaId) continue;
+    if (m.isPlaying) {
+      try { _module._fs_pause(m.fsHandle); } catch(_) {}
+      m.isPlaying = false;
+    }
+  }
+}
+
+// ── Helpers: allocate argv for _fs_create ────────────────────────────────────
+
+function _allocArgv(args) {
+  const argvPtr = _module._malloc(args.length * 4);
+  const ptrs = args.map(a => _module.allocateUTF8(a));
+  new Uint32Array(_module.wasmMemory.buffer, argvPtr, args.length)
+    .forEach((_, i, arr) => { arr[i] = ptrs[i]; });
+  return { argvPtr, ptrs };
+}
+
+function _freeArgv({ argvPtr, ptrs }) {
+  ptrs.forEach(p => _module._free(p));
+  _module._free(argvPtr);
 }
 
 // ── Message handler ──────────────────────────────────────────────────────────
@@ -348,16 +379,13 @@ self.addEventListener('message', function(e) {
         _module.vlcOnDecoderFrame = self._vlcOnDecoderFrame;
         _module.vlcAwaitFrame = self._vlcAwaitFrame;
 
-        // Initialize VLC with --vout=dummy (no GL/canvas/DOM needed)
-        const opts = VLC_INIT_OPTIONS.split(' ').filter(Boolean);
-        const args = ['vlc', ...opts];
-        const argvPtr = _module._malloc(args.length * 4);
-        const ptrs = args.map(a => _module.allocateUTF8(a));
-        new Uint32Array(_module.wasmMemory.buffer, argvPtr, args.length)
-          .forEach((_, i, arr) => { arr[i] = ptrs[i]; });
-        _module._wasm_libvlc_init(args.length, argvPtr);
-        ptrs.forEach(p => _module._free(p));
-        _module._free(argvPtr);
+        // Initialize the shared libvlc instance once — all subsequent fs_create()
+        // calls reuse it, avoiding pthread exhaustion with multiple media files.
+        const vlcArgs = FS_CREATE_ARGS;
+        const sharedArgv = _allocArgv(vlcArgs);
+        const initResult = _module._fs_init_shared(vlcArgs.length, sharedArgv.argvPtr);
+        _freeArgv(sharedArgv);
+        if (initResult !== 0) throw new Error('fs_init_shared failed');
 
         self.postMessage({ type: 'init_done' });
       } catch (err) {
@@ -373,39 +401,31 @@ self.addEventListener('message', function(e) {
       _evictIfNeeded();
       (async () => { try {
         if (!_module) throw new Error('VLC module not initialized — init must complete first');
+
+        // Create frame server handle (reuses the shared libvlc instance from init)
+        const fsHandle = _module._fs_create();
+        if (!fsHandle) throw new Error('fs_create failed');
+
+        // Guard EOS at C level — prevents ASYNCIFY deadlock at end-of-stream.
+        // The C handler seeks to 0 + pauses instead of stopping (which would deadlock).
+        _module._fs_guard_eos(fsHandle);
+
         // Assign a unique vlc_access_file slot for this media
         // (each media player reads from its own slot — no cross-contamination)
         const slot = _nextFileSlot++;
         _module.vlc_access_file[slot] = file;
 
-        // Create media player using the global VLC instance (has plugins loaded)
-        const mp = _module._wasm_media_player_new();
-        if (!mp) throw new Error('wasm_media_player_new failed');
-        _module._attach_update_events(mp);
-
-        // Create media pointing to this file's unique slot
+        // Open media file via frame server API
         const pathPtr = _module.allocateUTF8(`emjsfile://${slot}`);
-        const media = _module._wasm_media_new_location(pathPtr);
+        const openResult = _module._fs_open(fsHandle, pathPtr);
         _module._free(pathPtr);
-        if (!media) { _module._wasm_media_player_release(mp); throw new Error('media_new failed'); }
-
-        _module._wasm_media_player_set_media(mp, media);
-        _module._wasm_media_release(media);
-        // NOTE: _set_global_media_player is intentionally NOT called here.
-        // It sets a single global pointer used by main.c's iter() loop which
-        // we don't use. With multi-file support, each media has its own mp.
-
-        // NOTE: _fs_guard_eos is NOT called here because VLCWorker uses the
-        // _wasm_* legacy API (libvlc_media_player_t*), not the frame server API
-        // (frame_server_t*). Calling _fs_guard_eos(mp) would pass the wrong
-        // pointer type. The _fs_* migration is planned for a future issue.
-        // EOS prevention is handled by cancel-main-loop.js (primary), JS-level
-        // duration throttle (50ms), and timeout detection (2000ms).
+        if (openResult !== 0) { _module._fs_destroy(fsHandle); throw new Error('fs_open failed'); }
 
         // Mute and play to trigger demux + decode probe
-        _module._wasm_audio_set_volume(mp, 0);
+        _module._fs_set_volume(fsHandle, 0);
         const startCount = _totalFrameCount;
-        _module._wasm_media_player_play(mp);
+        _exclusivePlay(mediaId);  // Pause other media before probe playback
+        _module._fs_play(fsHandle);
 
         // Wait for first frame (use global frame counter — no handler wrapping)
         _frameIntervals = [];
@@ -436,14 +456,20 @@ self.addEventListener('message', function(e) {
         }
 
         // Pause after probe
-        _module._wasm_media_player_set_pause(mp, 1);
+        _module._fs_pause(fsHandle);
 
-        // Get dimensions
+        // Get dimensions via pointer output params
         let width = 0, height = 0;
         try {
-          width = _module._wasm_video_get_size_x(mp);
-          height = _module._wasm_video_get_size_y(mp);
-          if (width === -1 || height === -1) { width = 0; height = 0; }
+          const wPtr = _module._malloc(4);
+          const hPtr = _module._malloc(4);
+          const sizeResult = _module._fs_get_size(fsHandle, wPtr, hPtr);
+          if (sizeResult === 0) {
+            width = new Uint32Array(_module.wasmMemory.buffer, wPtr, 1)[0];
+            height = new Uint32Array(_module.wasmMemory.buffer, hPtr, 1)[0];
+          }
+          _module._free(wPtr);
+          _module._free(hPtr);
         } catch(_) {}
 
         // Get duration
@@ -451,12 +477,12 @@ self.addEventListener('message', function(e) {
         const lenStart = Date.now();
         while (durationMs <= 0 && Date.now() - lenStart < 3500) {
           await new Promise(r => setTimeout(r, 200));
-          try { durationMs = Number(_module._wasm_media_player_get_length(mp)); } catch(_) {}
+          try { durationMs = Number(_module._fs_get_duration(fsHandle)); } catch(_) {}
         }
 
         // Store per-media state
         _media.set(mediaId, {
-          mp, file, slot, durationMs, width, height,
+          fsHandle, file, slot, durationMs, width, height,
           fps: _globalFps,
           isPlaying: false,
           isSeeking: false,
@@ -471,6 +497,7 @@ self.addEventListener('message', function(e) {
           clipEndMs: 0,
           boundedMode: false
         });
+        _lastActiveMediaId = mediaId;
 
         self.postMessage({
           type: 'probe_done', mediaId, durationMs, width, height, fps: _globalFps
@@ -513,6 +540,15 @@ self.addEventListener('message', function(e) {
         mediaId, targetMs: clampedMs, toleranceMs: toleranceMs || _frameTolerance(), timer
       });
 
+      // Only one media may decode at a time (global frame callback)
+      _exclusivePlay(mediaId);
+
+      // Re-open media if switching from a different clip — resets the stale decoder
+      if (_lastActiveMediaId !== null && _lastActiveMediaId !== mediaId) {
+        _reactivateMedia(m);
+      }
+      _lastActiveMediaId = mediaId;
+
       // Seek and play to get the frame
       const seekMs = Math.max(0, clampedMs - SEEK_LEAD_MS);
 
@@ -544,9 +580,9 @@ self.addEventListener('message', function(e) {
       m.lastSeekMs = seekMs;
       m.lastSeekTime = Date.now();
       m.isSeeking = true;
-      _module._wasm_media_player_set_time(m.mp, BigInt(seekMs), 1);
+      _module._fs_seek(m.fsHandle, BigInt(seekMs), 1);
       if (!m.isPlaying) {
-        _module._wasm_media_player_play(m.mp);
+        _module._fs_play(m.fsHandle);
         m.isPlaying = true;
         _startEosCheck();
       }
@@ -577,20 +613,25 @@ self.addEventListener('message', function(e) {
       }
 
       if (playing) {
+        _exclusivePlay(mediaId);
+        if (_lastActiveMediaId !== null && _lastActiveMediaId !== mediaId) {
+          _reactivateMedia(m);
+        }
+        _lastActiveMediaId = mediaId;
         if (m.atEos) _recoverFromEos(m);
         const playSeekMs = Math.max(0, seekMs - SEEK_LEAD_MS);
-        _module._wasm_media_player_set_time(m.mp, BigInt(playSeekMs), 1);
+        _module._fs_seek(m.fsHandle, BigInt(playSeekMs), 1);
         m.lastSeekMs = playSeekMs;
         m.lastSeekTime = Date.now();
         m.lastProducedFrameMs = -1;  // Reset — VLC will produce frames from the new position
-        _module._wasm_media_player_set_rate(m.mp, 1.0);
+        _module._fs_set_rate(m.fsHandle, 1.0);
         if (!m.isPlaying) {
-          _module._wasm_media_player_play(m.mp);
+          _module._fs_play(m.fsHandle);
           m.isPlaying = true;
           _startEosCheck();
         }
       } else {
-        _module._wasm_media_player_set_pause(m.mp, 1);
+        _module._fs_pause(m.fsHandle);
         m.isPlaying = false;
       }
       break;
@@ -679,7 +720,7 @@ self.addEventListener('message', function(e) {
         if (req.mediaId === mediaId) { hasPending = true; break; }
       }
       if (!hasPending) {
-        _module._wasm_media_player_set_pause(m.mp, 1);
+        _module._fs_pause(m.fsHandle);
         m.isPlaying = false;
       }
       break;
@@ -689,10 +730,14 @@ self.addEventListener('message', function(e) {
       const { mediaId, startMs, rate } = msg;
       const m = _getMedia(mediaId);
       if (!m) break;
-      _module.vlc_access_file[1] = m.file;
-      _module._wasm_media_player_set_time(m.mp, BigInt(startMs), 0);
-      _module._wasm_media_player_set_rate(m.mp, rate || 1.5);
-      _module._wasm_media_player_play(m.mp);
+      _exclusivePlay(mediaId);
+      if (_lastActiveMediaId !== null && _lastActiveMediaId !== mediaId) {
+        _reactivateMedia(m);
+      }
+      _lastActiveMediaId = mediaId;
+      _module._fs_seek(m.fsHandle, BigInt(startMs), 0);
+      _module._fs_set_rate(m.fsHandle, rate || 1.5);
+      _module._fs_play(m.fsHandle);
       m.isPlaying = true;
       break;
     }
@@ -717,8 +762,8 @@ self.addEventListener('message', function(e) {
       const { mediaId } = msg;
       const m = _getMedia(mediaId);
       if (!m) break;
-      _module._wasm_media_player_set_pause(m.mp, 1);
-      _module._wasm_media_player_set_rate(m.mp, 1.0);
+      _module._fs_pause(m.fsHandle);
+      _module._fs_set_rate(m.fsHandle, 1.0);
       m.isPlaying = false;
       // Flush pending sequential requests
       for (const [reqId, req] of _pendingFrames) {
@@ -737,9 +782,9 @@ self.addEventListener('message', function(e) {
       if (!m) break;
       // Cancel any pending seek throttle to prevent _doSeek on a freed handle
       if (m._seekThrottleTimer) { clearTimeout(m._seekThrottleTimer); m._seekThrottleTimer = null; }
-      try { _module._wasm_media_player_set_pause(m.mp, 1); } catch(_) {}
-      try { _module._wasm_media_player_release(m.mp); } catch(_) {}
+      try { _module._fs_destroy(m.fsHandle); } catch(_) {}
       _media.delete(mediaId);
+      if (_lastActiveMediaId === mediaId) _lastActiveMediaId = null;
       // Flush pending requests for this media
       for (const [reqId, req] of _pendingFrames) {
         if (req.mediaId === mediaId) {
@@ -754,12 +799,14 @@ self.addEventListener('message', function(e) {
       // Destroy all media
       for (const [id, m] of _media) {
         if (m._seekThrottleTimer) { clearTimeout(m._seekThrottleTimer); m._seekThrottleTimer = null; }
-        try { _module._wasm_media_player_set_pause(m.mp, 1); } catch(_) {}
-        try { _module._wasm_media_player_release(m.mp); } catch(_) {}
+        try { _module._fs_destroy(m.fsHandle); } catch(_) {}
       }
       _media.clear();
+      _lastActiveMediaId = null;
       for (const [, req] of _pendingFrames) clearTimeout(req.timer);
       _pendingFrames.clear();
+      // Release shared VLC instance
+      try { _module._fs_shutdown(); } catch(_) {}
       break;
     }
   }

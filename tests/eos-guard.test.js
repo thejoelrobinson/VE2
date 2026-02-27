@@ -81,8 +81,8 @@ function _eos_seek_back(fs) {
 // ─── JS-level EOS logic simulation ───────────────────────────────────────────
 // Mirrors VLCWorker.js duration clamping, EOS timeout, recovery, and throttle.
 
-const EOS_TIMEOUT_MS = 2000;
-const DURATION_THROTTLE_MS = 50;
+const EOS_TIMEOUT_MS = 5000;
+const DURATION_THROTTLE_MS = 0;
 
 /** Clamp seek target to prevent VLC from seeking past media end (VLCWorker L401-403) */
 function clampSeekMs(timeMs, durationMs) {
@@ -95,8 +95,7 @@ function clampSeekMs(timeMs, durationMs) {
 /** Create a simulated media entry matching VLCWorker's _media Map values */
 function createMediaEntry(durationMs, overrides = {}) {
   return {
-    mp: { handle: 1 },
-    file: { name: 'test.mxf' },
+    fsHandle: { handle: 1 },
     slot: 1,
     durationMs,
     width: 1920,
@@ -131,7 +130,7 @@ function checkEos(mediaEntries, timeSinceLastFrame) {
  * Returns true if recovery was performed.
  */
 function recoverFromEos(m, moduleReady = true) {
-  if (!m.atEos || !m.mp || !m.file || !moduleReady) return false;
+  if (!m.atEos || !m.fsHandle || !moduleReady) return false;
   // stop + re-open media on same player
   m.atEos = false;
   return true;
@@ -357,16 +356,16 @@ describe('EOS guard — eos_guarded prevents duplicate registration', () => {
 });
 
 describe('EOS guard — duration clamping logic', () => {
-  it('clamps timeMs at exactly durationMs -> durationMs - 50', () => {
-    expect(clampSeekMs(10000, 10000)).toBe(9950);
+  it('clamps timeMs at exactly durationMs -> durationMs (0ms margin)', () => {
+    expect(clampSeekMs(10000, 10000)).toBe(10000);
   });
 
-  it('clamps timeMs beyond durationMs -> durationMs - 50', () => {
-    expect(clampSeekMs(10100, 10000)).toBe(9950);
+  it('clamps timeMs beyond durationMs -> durationMs (0ms margin)', () => {
+    expect(clampSeekMs(10100, 10000)).toBe(10000);
   });
 
-  it('clamps timeMs far beyond durationMs -> durationMs - 50', () => {
-    expect(clampSeekMs(99999, 10000)).toBe(9950);
+  it('clamps timeMs far beyond durationMs -> durationMs (0ms margin)', () => {
+    expect(clampSeekMs(99999, 10000)).toBe(10000);
   });
 
   it('does not clamp timeMs below durationMs', () => {
@@ -392,18 +391,18 @@ describe('EOS guard — duration clamping logic', () => {
   });
 
   it('edge case: very short media (durationMs = 100) clamps correctly', () => {
-    // durationMs - 50 = 50, Math.max(0, 50) = 50
-    expect(clampSeekMs(100, 100)).toBe(50);
-    expect(clampSeekMs(200, 100)).toBe(50);
+    // durationMs - 0 = 100, Math.max(0, 100) = 100
+    expect(clampSeekMs(100, 100)).toBe(100);
+    expect(clampSeekMs(200, 100)).toBe(100);
   });
 
-  it('edge case: durationMs exactly 50 -> clamp to 0', () => {
-    expect(clampSeekMs(50, 50)).toBe(0);
+  it('edge case: durationMs exactly 50 -> clamp to 50', () => {
+    expect(clampSeekMs(50, 50)).toBe(50);
   });
 
-  it('edge case: durationMs = 51 -> clamp to 1', () => {
-    expect(clampSeekMs(51, 51)).toBe(1);
-    expect(clampSeekMs(300, 51)).toBe(1);
+  it('edge case: durationMs = 51 -> clamp to 51', () => {
+    expect(clampSeekMs(51, 51)).toBe(51);
+    expect(clampSeekMs(300, 51)).toBe(51);
   });
 
   it('negative durationMs -> no clamping (durationMs > 0 check fails)', () => {
@@ -416,15 +415,15 @@ describe('EOS guard — duration clamping logic', () => {
 });
 
 describe('EOS guard — EOS timeout detection', () => {
-  it('marks atEos = true when no frames for >2000ms while playing', () => {
+  it('marks atEos = true when no frames for >5000ms while playing', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
-    const detected = checkEos([m], 2500);
+    const detected = checkEos([m], 5500);
     expect(detected).toBe(true);
     expect(m.atEos).toBe(true);
     expect(m.isPlaying).toBe(false);
   });
 
-  it('does not mark EOS when frames arrive within 2000ms', () => {
+  it('does not mark EOS when frames arrive within 5000ms', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
     const detected = checkEos([m], 200);
     expect(detected).toBe(false);
@@ -432,16 +431,16 @@ describe('EOS guard — EOS timeout detection', () => {
     expect(m.isPlaying).toBe(true);
   });
 
-  it('does not mark EOS at exactly 2000ms (boundary — not greater)', () => {
+  it('does not mark EOS at exactly 5000ms (boundary — not greater)', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
-    const detected = checkEos([m], 2000);
+    const detected = checkEos([m], 5000);
     expect(detected).toBe(false);
     expect(m.atEos).toBe(false);
   });
 
-  it('marks EOS at 2001ms (just over threshold)', () => {
+  it('marks EOS at 5001ms (just over threshold)', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
-    const detected = checkEos([m], 2001);
+    const detected = checkEos([m], 5001);
     expect(detected).toBe(true);
     expect(m.atEos).toBe(true);
   });
@@ -458,7 +457,7 @@ describe('EOS guard — EOS timeout detection', () => {
     const m2 = createMediaEntry(5000, { isPlaying: false });
     const m3 = createMediaEntry(8000, { isPlaying: true });
 
-    checkEos([m1, m2, m3], 2500);
+    checkEos([m1, m2, m3], 5500);
 
     expect(m1.atEos).toBe(true);
     expect(m1.isPlaying).toBe(false);
@@ -480,7 +479,7 @@ describe('EOS guard — EOS timeout detection', () => {
       { mediaId: 'media-2', reqId: 3 },
     ];
     // Simulate EOS flush
-    checkEos([m], 2500);
+    checkEos([m], 5500);
     // Filter pending for affected media (simulating VLCWorker behavior)
     const flushed = pending.filter(p => p.mediaId === 'media-1');
     const remaining = pending.filter(p => p.mediaId !== 'media-1');
@@ -505,14 +504,8 @@ describe('EOS guard — EOS recovery flow', () => {
     expect(m.atEos).toBe(false);
   });
 
-  it('skips recovery when mp is null (destroyed)', () => {
-    const m = createMediaEntry(10000, { atEos: true, mp: null });
-    const recovered = recoverFromEos(m);
-    expect(recovered).toBe(false);
-  });
-
-  it('skips recovery when file is null', () => {
-    const m = createMediaEntry(10000, { atEos: true, file: null });
+  it('skips recovery when fsHandle is null (destroyed)', () => {
+    const m = createMediaEntry(10000, { atEos: true, fsHandle: null });
     const recovered = recoverFromEos(m);
     expect(recovered).toBe(false);
   });
@@ -528,7 +521,7 @@ describe('EOS guard — EOS recovery flow', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
 
     // Simulate EOS detection
-    checkEos([m], 2500);
+    checkEos([m], 5500);
     expect(m.atEos).toBe(true);
     expect(m.isPlaying).toBe(false);
 
@@ -556,7 +549,7 @@ describe('EOS guard — EOS recovery flow', () => {
 
     for (let i = 0; i < 5; i++) {
       // Hit EOS
-      checkEos([m], 2500);
+      checkEos([m], 5500);
       expect(m.atEos).toBe(true);
 
       // Recover
@@ -569,20 +562,15 @@ describe('EOS guard — EOS recovery flow', () => {
   });
 });
 
-describe('EOS guard — duration throttle (pre-EOS pause)', () => {
-  it('triggers pause when frame is within 50ms of media end', () => {
-    // frameMs = 9960, durationMs = 10000 => 10000 - 9960 = 40 < 50
-    expect(durationThrottle(9960, 10000, true)).toBe(true);
+describe('EOS guard — duration throttle (pre-EOS pause, 0ms margin)', () => {
+  it('does not trigger when frame is below durationMs', () => {
+    // frameMs = 9960, durationMs = 10000 => 9960 < 10000
+    expect(durationThrottle(9960, 10000, true)).toBe(false);
   });
 
-  it('triggers pause at exactly durationMs - 50 (boundary)', () => {
-    // frameMs = 9950, durationMs = 10000 => 10000 - 9950 = 50, frameMs >= 9950
-    expect(durationThrottle(9950, 10000, true)).toBe(true);
-  });
-
-  it('does not trigger when frame is outside 50ms window', () => {
-    // frameMs = 9949, durationMs = 10000 => 9949 < 9950
-    expect(durationThrottle(9949, 10000, true)).toBe(false);
+  it('does not trigger at durationMs - 50 (no JS margin with _fs_guard_eos)', () => {
+    // frameMs = 9950, durationMs = 10000 => 9950 < 10000
+    expect(durationThrottle(9950, 10000, true)).toBe(false);
   });
 
   it('does not trigger when frame is far from end', () => {
@@ -602,7 +590,7 @@ describe('EOS guard — duration throttle (pre-EOS pause)', () => {
   });
 
   it('triggers at durationMs exactly (frame at media end)', () => {
-    // frameMs = 10000, durationMs = 10000 => 10000 >= 9950
+    // frameMs = 10000, durationMs = 10000 => 10000 >= 10000
     expect(durationThrottle(10000, 10000, true)).toBe(true);
   });
 
@@ -610,10 +598,16 @@ describe('EOS guard — duration throttle (pre-EOS pause)', () => {
     expect(durationThrottle(10050, 10000, true)).toBe(true);
   });
 
+  it('does not trigger at durationMs - 1 (just under boundary)', () => {
+    // frameMs = 9999, durationMs = 10000 => 9999 < 10000
+    expect(durationThrottle(9999, 10000, true)).toBe(false);
+  });
+
   it('edge case: very short media (durationMs = 100)', () => {
-    // durationMs - 50 = 50, so frames >= 50 trigger
+    // margin = 0, so only frames >= 100 trigger
     expect(durationThrottle(0, 100, true)).toBe(false);
-    expect(durationThrottle(50, 100, true)).toBe(true);
+    expect(durationThrottle(50, 100, true)).toBe(false);
+    expect(durationThrottle(100, 100, true)).toBe(true);
   });
 
   it('negative durationMs -> no trigger (guard fails)', () => {
@@ -626,10 +620,10 @@ describe('EOS guard — integrated scenario: seek near end', () => {
     const m = createMediaEntry(10000);
     const durationMs = m.durationMs;
 
-    // 1. Clamp seek target
+    // 1. Clamp seek target (0ms margin: clamps to durationMs)
     const seekTarget = 10000;
     const clamped = clampSeekMs(seekTarget, durationMs);
-    expect(clamped).toBe(9950);
+    expect(clamped).toBe(10000);
 
     // 2. Not at EOS, so no recovery needed
     expect(m.atEos).toBe(false);
@@ -637,8 +631,8 @@ describe('EOS guard — integrated scenario: seek near end', () => {
     // 3. Start playing for seek
     m.isPlaying = true;
 
-    // 4. Frame arrives at 9960 — within 50ms window, throttle fires
-    const throttled = durationThrottle(9960, durationMs, m.isPlaying);
+    // 4. Frame arrives at durationMs — throttle fires (0ms margin)
+    const throttled = durationThrottle(10000, durationMs, m.isPlaying);
     expect(throttled).toBe(true);
 
     // 5. Media paused by throttle — no EOS timeout
@@ -651,15 +645,15 @@ describe('EOS guard — integrated scenario: seek near end', () => {
     const m = createMediaEntry(10000);
     const durationMs = m.durationMs;
 
-    // 1. Seek past end, clamped
+    // 1. Seek past end, clamped (0ms margin)
     const clamped = clampSeekMs(12000, durationMs);
-    expect(clamped).toBe(9950);
+    expect(clamped).toBe(10000);
 
     // 2. Play to decode
     m.isPlaying = true;
 
     // 3. No frames arrive (codec stall) -> EOS detected
-    checkEos([m], 2500);
+    checkEos([m], 5500);
     expect(m.atEos).toBe(true);
 
     // 4. New seek triggers recovery

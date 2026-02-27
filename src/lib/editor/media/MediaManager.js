@@ -30,12 +30,16 @@ function probeMedia(file) {
     // duration/fps/resolution for containers the browser may struggle with
     // (MXF, AVI, MKV, etc.). Falls back to HTMLVideoElement if VLC fails.
     if (type === MEDIA_TYPES.VIDEO) {
+      // Predict the mediaId that importFiles will assign so VLCDecoder can
+      // look up this bridge later — avoids _fs_destroy/_fs_create cycles
+      // that hang the shared libvlc WASM instance.
       const predictedId = `media-${mediaIdCounter + 1}`;
       const probeBridge = createVLCBridge(predictedId);
       probeBridge.loadFile(file)
         .then(({ durationMs, width, height, fps }) => {
-          // Store the bridge for VLCDecoder to pick up later (avoids creating
-          // a second VLC media player for the same file, which hangs in WASM).
+          // Store the bridge for VLCDecoder to reuse. With _exclusivePlay
+          // in VLCWorker, multiple handles coexist safely (only one is
+          // active at a time).
           if (!mediaManager._vlcProbedBridges) mediaManager._vlcProbedBridges = new Map();
           mediaManager._vlcProbedBridges.set(predictedId, probeBridge);
           const url = URL.createObjectURL(file);

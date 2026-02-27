@@ -3,8 +3,8 @@
  *
  * After this issue is resolved:
  * - VLCWorker supports per-media clipStartMs/clipEndMs/boundedMode fields
- * - Duration throttle uses clip bounds (0ms margin) when bounded, media end (50ms) otherwise
- * - Seek clamping respects clip bounds (0ms margin bounded, 50ms unbounded)
+ * - Duration throttle uses clip bounds (0ms margin) when bounded, media end (0ms) otherwise
+ * - Seek clamping respects clip bounds (0ms margin bounded, 0ms unbounded)
  * - clip_end_reached message emitted when clip end < media end
  *
  * Pure-logic tests — no browser APIs, WASM, or VideoFrame needed.
@@ -13,15 +13,14 @@ import { describe, it, expect } from 'vitest';
 
 // ── Constants matching VLCWorker ────────────────────────────────────────────
 const CLIP_SEEK_MARGIN_MS = 0;    // bounded seek clamp (no margin needed with cancel-main-loop)
-const DEFAULT_SEEK_MARGIN_MS = 50; // unbounded seek clamp
+const DEFAULT_SEEK_MARGIN_MS = 0;  // unbounded seek clamp (0ms — _fs_guard_eos handles EOS at C level)
 const MIN_CLIP_LENGTH_MS = 50;     // set_clip_bounds rejection threshold
 
 // ── Simulation helpers ──────────────────────────────────────────────────────
 
 function createMediaEntry(durationMs, overrides = {}) {
   return {
-    mp: { handle: 1 },
-    file: { name: 'test.mxf' },
+    fsHandle: { handle: 1 },
     slot: 1,
     durationMs,
     width: 1920,
@@ -52,7 +51,7 @@ function durationThrottle(frameMs, m) {
   const effectiveEnd = m.boundedMode
     ? Math.min(m.clipEndMs, m.durationMs)
     : m.durationMs;
-  const margin = m.boundedMode ? 0 : 50;
+  const margin = 0; // _fs_guard_eos handles EOS at C level; no JS margin needed
   if (frameMs >= effectiveEnd - margin) {
     m.isPlaying = false;
     const clipEndReached = m.boundedMode && effectiveEnd < m.durationMs;
@@ -135,23 +134,23 @@ describe('Issue #9 — Clip-Bounded VLC Playback', () => {
     });
   });
 
-  describe('Default (unbounded) duration throttle at 50ms', () => {
-    it('still fires at durationMs - 50 when boundedMode is false', () => {
+  describe('Default (unbounded) duration throttle at 0ms', () => {
+    it('fires at exactly durationMs when boundedMode is false (0ms margin)', () => {
       const m = createMediaEntry(10000, { isPlaying: true });
 
-      // Just outside 50ms window
-      const r1 = durationThrottle(9949, m);
+      // Just under durationMs — should NOT fire
+      const r1 = durationThrottle(9999, m);
       expect(r1.paused).toBe(false);
 
-      // At boundary
-      const r2 = durationThrottle(9950, m);
+      // At exactly durationMs — should fire
+      const r2 = durationThrottle(10000, m);
       expect(r2.paused).toBe(true);
       expect(r2.clipEndReached).toBe(false);
     });
 
     it('does not emit clip_end_reached in default mode', () => {
       const m = createMediaEntry(10000, { isPlaying: true });
-      const r = durationThrottle(9960, m);
+      const r = durationThrottle(10000, m);
       expect(r.paused).toBe(true);
       expect(r.clipEndReached).toBe(false);
     });
@@ -197,10 +196,10 @@ describe('Issue #9 — Clip-Bounded VLC Playback', () => {
       expect(clampSeek(15000, m)).toBe(15000); // at clipEnd with 0 margin
     });
 
-    it('uses default 50ms clamp when unbounded', () => {
+    it('uses default 0ms clamp when unbounded', () => {
       const m = createMediaEntry(10000);
-      expect(clampSeek(10000, m)).toBe(9950);
-      expect(clampSeek(12000, m)).toBe(9950);
+      expect(clampSeek(10000, m)).toBe(10000);
+      expect(clampSeek(12000, m)).toBe(10000);
       expect(clampSeek(5000, m)).toBe(5000);
     });
   });
@@ -380,7 +379,7 @@ describe('Issue #9 — Clip-Bounded VLC Playback', () => {
 
       // Seek past old clipEnd now uses default media-end clamping
       expect(clampSeek(20000, m)).toBe(20000); // within 60000, passes through
-      expect(clampSeek(60000, m)).toBe(59950);  // clamped to durationMs - 50
+      expect(clampSeek(60000, m)).toBe(60000);  // clamped to durationMs - 0 (0ms margin)
     });
   });
 });

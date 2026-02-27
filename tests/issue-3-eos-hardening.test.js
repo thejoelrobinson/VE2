@@ -3,9 +3,9 @@
  *
  * After this issue is resolved:
  * - C-level _fs_guard_eos(mp) is enabled on every loaded media
- * - Duration throttle reduced to durationMs - 50 (cancel-main-loop.js is primary EOS defense)
+ * - Duration throttle reduced to 0ms margin (_fs_guard_eos is primary EOS defense at C level)
  * - _recoverFromEos is lightweight (just clears atEos flag, no stop+reopen)
- * - EOS timeout relaxed from 400ms to 2000ms
+ * - EOS timeout relaxed from 400ms to 5000ms
  *
  * Pure-logic tests — no browser APIs, WASM, or VideoFrame needed.
  */
@@ -13,11 +13,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 // ── NEW hardened constants (issue #3 changes) ───────────────────────────────
 
-const EOS_TIMEOUT_MS = 2000;        // was 400ms
-const DURATION_THROTTLE_MS = 50;    // was 200ms, then 500ms, now 50ms
+const EOS_TIMEOUT_MS = 5000;        // was 400ms → 2000ms → 5000ms
+const DURATION_THROTTLE_MS = 0;     // was 200ms → 500ms → 50ms → 0ms (_fs_guard_eos handles EOS at C level)
 
-// ── Duration throttle simulation (50ms margin) ──────────────────────────────
-// Mirrors VLCWorker frame interceptor: pause VLC when within 50ms of media end
+// ── Duration throttle simulation (0ms margin) ───────────────────────────────
+// Mirrors VLCWorker frame interceptor: pause VLC at media end (C-level guard handles EOS)
 
 function durationThrottle(frameMs, durationMs, isPlaying) {
   if (isPlaying && durationMs > 0 && frameMs >= durationMs - DURATION_THROTTLE_MS) {
@@ -26,7 +26,7 @@ function durationThrottle(frameMs, durationMs, isPlaying) {
   return false;
 }
 
-// ── Duration clamp simulation (50ms margin) ─────────────────────────────────
+// ── Duration clamp simulation (0ms margin) ──────────────────────────────────
 // Clamp seek target so VLC never seeks past media end
 
 function clampSeekMs(timeMs, durationMs) {
@@ -36,12 +36,11 @@ function clampSeekMs(timeMs, durationMs) {
   return timeMs;
 }
 
-// ── EOS timeout check simulation (relaxed to 2000ms) ───────────────────────
+// ── EOS timeout check simulation (relaxed to 5000ms) ───────────────────────
 
 function createMediaEntry(durationMs, overrides = {}) {
   return {
-    mp: { handle: 1 },
-    file: { name: 'test.mp4' },
+    fsHandle: { handle: 1 },
     slot: 1,
     durationMs,
     width: 1920,
@@ -80,7 +79,7 @@ function lightweightRecoverFromEos(m) {
 
 // Old heavyweight recovery simulation (for comparison — should NOT be used)
 function heavyweightRecoverFromEos(m, _module) {
-  if (!m.atEos || !m.mp || !m.file) return false;
+  if (!m.atEos || !m.fsHandle || !_module) return false;
   // Stop player
   _module.stopCalled = true;
   // Re-open media on same player
@@ -93,32 +92,36 @@ function heavyweightRecoverFromEos(m, _module) {
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-describe('Issue #3 — Duration throttle at 50ms', () => {
-  it('triggers at durationMs - 50 (boundary)', () => {
-    // frameMs = 9950, durationMs = 10000 => 10000 - 9950 = 50, frameMs >= 9950
-    expect(durationThrottle(9950, 10000, true)).toBe(true);
-  });
-
-  it('does NOT trigger at durationMs - 51 (just outside window)', () => {
-    // frameMs = 9949, durationMs = 10000 => 9949 < 9950
-    expect(durationThrottle(9949, 10000, true)).toBe(false);
-  });
-
-  it('triggers when frame is within 50ms window', () => {
-    expect(durationThrottle(9960, 10000, true)).toBe(true);
-    expect(durationThrottle(9980, 10000, true)).toBe(true);
-    expect(durationThrottle(9999, 10000, true)).toBe(true);
+describe('Issue #3 — Duration throttle at 0ms (C-level guard handles EOS)', () => {
+  it('triggers at exactly durationMs (0ms margin)', () => {
+    // frameMs = 10000, durationMs = 10000 => 10000 >= 10000
     expect(durationThrottle(10000, 10000, true)).toBe(true);
   });
 
-  it('does NOT trigger when frame is well outside 50ms window', () => {
+  it('does NOT trigger at durationMs - 1 (just under boundary)', () => {
+    // frameMs = 9999, durationMs = 10000 => 9999 < 10000
+    expect(durationThrottle(9999, 10000, true)).toBe(false);
+  });
+
+  it('does NOT trigger at frames below durationMs', () => {
+    expect(durationThrottle(9950, 10000, true)).toBe(false);
+    expect(durationThrottle(9960, 10000, true)).toBe(false);
+    expect(durationThrottle(9980, 10000, true)).toBe(false);
+  });
+
+  it('triggers beyond durationMs (decoder overshoot)', () => {
+    expect(durationThrottle(10001, 10000, true)).toBe(true);
+    expect(durationThrottle(10050, 10000, true)).toBe(true);
+  });
+
+  it('does NOT trigger when frame is well below durationMs', () => {
     expect(durationThrottle(5000, 10000, true)).toBe(false);
     expect(durationThrottle(9000, 10000, true)).toBe(false);
     expect(durationThrottle(9900, 10000, true)).toBe(false);
   });
 
   it('does NOT trigger when not playing', () => {
-    expect(durationThrottle(9980, 10000, false)).toBe(false);
+    expect(durationThrottle(10000, 10000, false)).toBe(false);
   });
 
   it('does NOT trigger when durationMs = 0 (unknown duration)', () => {
@@ -126,16 +129,16 @@ describe('Issue #3 — Duration throttle at 50ms', () => {
   });
 
   it('handles short media (durationMs = 300)', () => {
-    // durationMs - 50 = 250, so frames >= 250 trigger
+    // margin = 0, so only frames >= 300 trigger
     expect(durationThrottle(0, 300, true)).toBe(false);
     expect(durationThrottle(100, 300, true)).toBe(false);
-    expect(durationThrottle(250, 300, true)).toBe(true);
-    expect(durationThrottle(260, 300, true)).toBe(true);
+    expect(durationThrottle(250, 300, true)).toBe(false);
+    expect(durationThrottle(300, 300, true)).toBe(true);
   });
 
-  it('clamping uses 50ms offset', () => {
-    expect(clampSeekMs(10000, 10000)).toBe(9950);
-    expect(clampSeekMs(12000, 10000)).toBe(9950);
+  it('clamping uses 0ms offset', () => {
+    expect(clampSeekMs(10000, 10000)).toBe(10000);
+    expect(clampSeekMs(12000, 10000)).toBe(10000);
   });
 
   it('clamping does not apply when below durationMs', () => {
@@ -144,18 +147,18 @@ describe('Issue #3 — Duration throttle at 50ms', () => {
   });
 
   it('clamping edge: very short media clamps correctly', () => {
-    // durationMs = 300, 300 - 50 = 250, Math.max(0, 250) = 250
-    expect(clampSeekMs(300, 300)).toBe(250);
-    expect(clampSeekMs(500, 300)).toBe(250);
+    // durationMs = 300, 300 - 0 = 300, Math.max(0, 300) = 300
+    expect(clampSeekMs(300, 300)).toBe(300);
+    expect(clampSeekMs(500, 300)).toBe(300);
   });
 
-  it('clamping edge: durationMs exactly 50 clamps to 0', () => {
-    expect(clampSeekMs(50, 50)).toBe(0);
+  it('clamping edge: durationMs exactly 50 clamps to 50', () => {
+    expect(clampSeekMs(50, 50)).toBe(50);
   });
 
-  it('clamping edge: durationMs = 51 clamps to 1', () => {
-    expect(clampSeekMs(51, 51)).toBe(1);
-    expect(clampSeekMs(600, 51)).toBe(1);
+  it('clamping edge: durationMs = 51 clamps to 51', () => {
+    expect(clampSeekMs(51, 51)).toBe(51);
+    expect(clampSeekMs(600, 51)).toBe(51);
   });
 
   it('negative timeMs passes through unclamped', () => {
@@ -198,7 +201,7 @@ describe('Issue #3 — Lightweight EOS recovery', () => {
   });
 });
 
-describe('Issue #3 — EOS timeout at 2000ms (relaxed from 400ms)', () => {
+describe('Issue #3 — EOS timeout at 5000ms (relaxed from 400ms → 2000ms → 5000ms)', () => {
   it('does NOT detect EOS at 400ms (old threshold)', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
     const detected = checkEos([m], 400);
@@ -207,38 +210,45 @@ describe('Issue #3 — EOS timeout at 2000ms (relaxed from 400ms)', () => {
     expect(m.isPlaying).toBe(true);
   });
 
-  it('does NOT detect EOS at 1999ms (just under new threshold)', () => {
-    const m = createMediaEntry(10000, { isPlaying: true });
-    const detected = checkEos([m], 1999);
-    expect(detected).toBe(false);
-    expect(m.atEos).toBe(false);
-  });
-
-  it('does NOT detect EOS at exactly 2000ms (boundary — not greater)', () => {
+  it('does NOT detect EOS at 2000ms (previous threshold)', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
     const detected = checkEos([m], 2000);
     expect(detected).toBe(false);
     expect(m.atEos).toBe(false);
   });
 
-  it('detects EOS at 2001ms (just over threshold)', () => {
+  it('does NOT detect EOS at 4999ms (just under new threshold)', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
-    const detected = checkEos([m], 2001);
+    const detected = checkEos([m], 4999);
+    expect(detected).toBe(false);
+    expect(m.atEos).toBe(false);
+  });
+
+  it('does NOT detect EOS at exactly 5000ms (boundary — not greater)', () => {
+    const m = createMediaEntry(10000, { isPlaying: true });
+    const detected = checkEos([m], 5000);
+    expect(detected).toBe(false);
+    expect(m.atEos).toBe(false);
+  });
+
+  it('detects EOS at 5001ms (just over threshold)', () => {
+    const m = createMediaEntry(10000, { isPlaying: true });
+    const detected = checkEos([m], 5001);
     expect(detected).toBe(true);
     expect(m.atEos).toBe(true);
     expect(m.isPlaying).toBe(false);
   });
 
-  it('detects EOS at 3000ms (well over threshold)', () => {
+  it('detects EOS at 6000ms (well over threshold)', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
-    const detected = checkEos([m], 3000);
+    const detected = checkEos([m], 6000);
     expect(detected).toBe(true);
     expect(m.atEos).toBe(true);
   });
 
   it('does NOT check non-playing media', () => {
     const m = createMediaEntry(10000, { isPlaying: false });
-    const detected = checkEos([m], 5000);
+    const detected = checkEos([m], 6000);
     expect(detected).toBe(false);
     expect(m.atEos).toBe(false);
   });
@@ -248,7 +258,7 @@ describe('Issue #3 — EOS timeout at 2000ms (relaxed from 400ms)', () => {
     const m2 = createMediaEntry(5000, { isPlaying: false });
     const m3 = createMediaEntry(8000, { isPlaying: true });
 
-    checkEos([m1, m2, m3], 2500);
+    checkEos([m1, m2, m3], 5500);
 
     expect(m1.atEos).toBe(true);
     expect(m1.isPlaying).toBe(false);
@@ -271,12 +281,12 @@ describe('Issue #3 — Full lifecycle: play -> EOS timeout -> lightweight recove
     expect(m.isPlaying).toBe(true);
     expect(m.atEos).toBe(false);
 
-    // 2. Frames stop for 1999ms — still no EOS (under new 2000ms threshold)
-    expect(checkEos([m], 1999)).toBe(false);
+    // 2. Frames stop for 4999ms — still no EOS (under new 5000ms threshold)
+    expect(checkEos([m], 4999)).toBe(false);
     expect(m.isPlaying).toBe(true);
 
-    // 3. Frames stop for 2001ms — EOS detected
-    expect(checkEos([m], 2001)).toBe(true);
+    // 3. Frames stop for 5001ms — EOS detected
+    expect(checkEos([m], 5001)).toBe(true);
     expect(m.isPlaying).toBe(false);
     expect(m.atEos).toBe(true);
 
@@ -300,7 +310,7 @@ describe('Issue #3 — Full lifecycle: play -> EOS timeout -> lightweight recove
 
     for (let i = 0; i < 5; i++) {
       // Hit EOS
-      checkEos([m], 2500);
+      checkEos([m], 5500);
       expect(m.atEos).toBe(true);
 
       // Lightweight recovery
@@ -316,7 +326,7 @@ describe('Issue #3 — Full lifecycle: play -> EOS timeout -> lightweight recove
     const m = createMediaEntry(10000, { isPlaying: true });
 
     // Hit EOS
-    checkEos([m], 3000);
+    checkEos([m], 5500);
     expect(m.atEos).toBe(true);
 
     // Seek handler checks atEos and recovers
@@ -324,19 +334,19 @@ describe('Issue #3 — Full lifecycle: play -> EOS timeout -> lightweight recove
     expect(m.atEos).toBe(false);
   });
 
-  it('duration throttle prevents EOS by pausing before end', () => {
+  it('duration throttle prevents EOS by pausing at media end', () => {
     const m = createMediaEntry(10000, { isPlaying: true });
     const durationMs = m.durationMs;
 
-    // Frame arrives at 9960ms — within new 50ms window
-    const shouldPause = durationThrottle(9960, durationMs, m.isPlaying);
+    // Frame arrives at durationMs — throttle fires (0ms margin)
+    const shouldPause = durationThrottle(10000, durationMs, m.isPlaying);
     expect(shouldPause).toBe(true);
 
     // Throttle pauses playback
     m.isPlaying = false;
 
     // EOS check skips non-playing media
-    const eos = checkEos([m], 5000);
+    const eos = checkEos([m], 6000);
     expect(eos).toBe(false);
     expect(m.atEos).toBe(false);
   });
